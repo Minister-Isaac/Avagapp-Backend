@@ -25,8 +25,12 @@ class CustomUserManager(BaseUserManager):
 
 
 class CustomUser(AbstractBaseUser):
+    avatar = models.ImageField(upload_to='avatars/', null=True, blank=True)
+    first_name = models.CharField(max_length=255)
+    last_name = models.CharField(max_length=255)
     username = models.CharField(max_length=255, unique=True)
     email = models.EmailField(unique=True)
+    phone_number = models.CharField(max_length=20, blank=True, null=True)
     role = models.CharField(max_length=50, choices=UserType.choices)
     institution = models.ForeignKey("learning.Institution", null=True, blank=True, on_delete=models.SET_NULL)
     
