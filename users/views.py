@@ -59,11 +59,12 @@ class UserViewSet(viewsets.ModelViewSet):
     def login(self, request, *args, **kwargs):
         email = request.data.get("email")
         password = request.data.get("password")
+        role = request.data.get("role")
         
-        if not email or not password:
-            return Response({"error": "Email and password are required."}, status=status.HTTP_400_BAD_REQUEST)
+        if not email or not password or not role:
+            return Response({"error": "Email, password and role are required."}, status=status.HTTP_400_BAD_REQUEST)
         
-        user = authenticate(request, email=email, password=password)
+        user = authenticate(request, email=email, password=password, role=role)
 
         if user:
             refresh = RefreshToken.for_user(user)
