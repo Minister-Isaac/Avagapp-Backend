@@ -1,7 +1,7 @@
 import re
 from rest_framework import serializers
 
-from .models import CustomUser
+from .models import CustomUser, StudentProfile
 from django.contrib.auth.password_validation import validate_password
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -12,7 +12,7 @@ User = get_user_model()
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ("id", "avatar", "username", "email", "role", "institution", "first_name", "last_name", "phone_number")
+        fields = ("id", "avatar", "email", "role", "institution", "first_name", "last_name", "phone_number")
         extra_kwargs = {
             "password": {"write_only": True, "required": False},
             "email": {"read_only": True},
@@ -25,10 +25,9 @@ class SignupSerializer(serializers.ModelSerializer):
     confirm_password = serializers.CharField(write_only=True, required=True)
     phone_number = serializers.CharField(required=False)
     
-    
     class Meta:
         model = User
-        fields = ("username", "email", "password", "confirm_password", "role", "institution", "phone_number", "first_name", "last_name")
+        fields = ("email", "password", "confirm_password", "role", "institution", "phone_number", "first_name", "last_name")
 
     def validate(self, attrs):
         # Check password and confirm password match
@@ -50,7 +49,9 @@ class SignupSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         try:
             user = CustomUser.objects.create_user(
-                username=validated_data["username"],
+                first_name=validated_data["first_name"],
+                last_name=validated_data["last_name"],
+                phone_number=validated_data.get("phone_number"),
                 email=validated_data["email"],
                 password=validated_data["password"],
                 role=validated_data["role"],
@@ -134,3 +135,9 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
         if not re.search(r"[a-zA-Z0-9]", value):
             raise ValidationError("Password must contain at least one alphanumeric character.")
         return value
+
+
+class StudentProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StudentProfile
+        fields = ["points", "medals", "level", "activities_completed"]

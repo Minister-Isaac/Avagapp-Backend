@@ -71,11 +71,12 @@ class KnowledgeTrail(BaseModel):
     is_complete = models.BooleanField(default=False)
     
     def __str__(self):
-        return f"{self.student.username} - {self.module.title} - {'Complete' if self.is_complete else 'Incomplete'}"
+        return f"{self.student.first_name} - {self.module.title} - {'Complete' if self.is_complete else 'Incomplete'}"
     
 
 class Badge(models.Model):
     name = models.CharField(max_length=100)
+    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name="badges")
     description = models.TextField()
     image = models.ImageField(upload_to='badges/')
     
@@ -95,7 +96,7 @@ class LeaderboardEntry(models.Model):
         ordering = ['-score', 'last_activity']
         
     def __str__(self):
-        return f"{self.student.username} - Rank: {self.rank}, Score: {self.score}"
+        return f"{self.student.first_name} - Rank: {self.rank}, Score: {self.score}"
     
     
 class Achievement(models.Model):
@@ -104,4 +105,4 @@ class Achievement(models.Model):
     awarded_at = models.DateTimeField(auto_now_add=True)
     
     def __str__(self):
-        return f"{self.student.username} - {self.badge.name} - {self.awarded_at}"
+        return f"{self.student.first_name} - {self.badge.name} - {self.awarded_at}"
