@@ -42,7 +42,7 @@ class OptionalViewSet(viewsets.ModelViewSet):
 
 class GameViewSet(viewsets.ModelViewSet):  
     serializer_class = GameSerializer
-    queryset = Game.objects.all()
+    queryset = Game.objects.all().order_by("id")
     
 
 class StudentDashboardAPIView(APIView):
