@@ -38,6 +38,10 @@ class CustomUser(AbstractBaseUser, PermissionsMixin, BaseModel):
     is_staff = models.BooleanField(default=False)
     is_superuser = models.BooleanField(default=False)
     
+    # New fields for Teacher information
+    subject_taught = models.ForeignKey("learning.Subject", on_delete=models.SET_NULL, null=True, blank=True)
+    experience_years = models.PositiveIntegerField(null=True, blank=True)
+
     objects = CustomUserManager()
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS =["first_name"]
@@ -55,3 +59,51 @@ class StudentProfile(models.Model):
 
     def __str__(self):
         return f"{self.student.first_name}'s Profile"
+    
+
+class NotificationRecipient(models.Model):
+    user = models.ForeignKey('users.CustomUser', on_delete=models.CASCADE)
+    notification = models.ForeignKey('Notification', on_delete=models.CASCADE)
+    is_read = models.BooleanField(default=False)
+    read_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ('user', 'notification')
+
+
+class Notification(BaseModel):
+    recipients = models.ManyToManyField(
+        CustomUser,
+        through='NotificationRecipient',
+        related_name='notifications',
+        help_text="Select one or more users to receive this notification."
+    )
+    sender = models.ForeignKey(
+        CustomUser,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='sent_notifications',
+        help_text="The admin or teacher who created this notification (optional)."
+    )
+    subject = models.CharField(
+        max_length=255,
+        help_text="A brief summary or title of the notification."
+    )
+    message = models.TextField(
+        help_text="The main content or details of the notification."
+    )
+    notification_type = models.CharField(
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text="Optional category for the notification (e.g., 'new_feature', 'announcement')."
+    )
+    link = models.URLField(
+        blank=True,
+        null=True,
+        help_text="Optional URL associated with this notification."
+    )
+
+    def __str__(self):
+        return f"Subject: {self.subject}"
