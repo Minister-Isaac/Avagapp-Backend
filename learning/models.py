@@ -54,6 +54,16 @@ class StudentAnswer(BaseModel):
     question = models.ForeignKey(Question, on_delete=models.CASCADE)
     selected_option = models.ForeignKey(Option, on_delete=models.CASCADE)
     
+    def save(self, *args, **kwargs):
+        # Check if the selected option is correct
+        if self.selected_option.is_correct:
+            # Get the student's profile
+            student_profile, created = StudentProfile.objects.get_or_create(student=self.student)
+            # Add the question's points to the student's points
+            student_profile.points += self.question.points
+            student_profile.save()
+        super().save(*args, **kwargs)
+        
 
 class Certificate(BaseModel):
     student = models.ForeignKey(User, on_delete=models.CASCADE)

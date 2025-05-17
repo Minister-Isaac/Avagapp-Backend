@@ -12,13 +12,13 @@ from django.shortcuts import get_object_or_404
 from users.choices import UserType
 
 from .models import (
-    Game, KnowledgeTrail, Achievement, Option,
+    Game, KnowledgeTrail, Achievement, Option, StudentAnswer,
     Subject, Question, PlayedGame
     )
 from .serializers import (
     DashboardSerializer, GameSerializer, KnowledgeTrailSerializer,
     AchievementSerializer, OptionSerializer,
-    PlayedGameSerializer, QuestionSerializer,
+    PlayedGameSerializer, QuestionSerializer, StudentAnswerSerializer,
     SubjectSerializer,
     StudentLeaderboardSerializer
 )
@@ -154,3 +154,11 @@ class LeaderboardViewSet(viewsets.ReadOnlyModelViewSet):
             'leaderboard': ranked_data
         })
 
+
+class StudentAnswerViewSet(viewsets.ModelViewSet):
+    queryset = StudentAnswer.objects.all()
+    serializer_class = StudentAnswerSerializer
+
+    def perform_create(self, serializer):
+        # Automatically associate the logged-in student with the answer
+        serializer.save(student=self.request.user)
