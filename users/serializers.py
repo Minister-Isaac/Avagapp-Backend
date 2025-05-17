@@ -59,15 +59,15 @@ class SignupSerializer(serializers.ModelSerializer):
 
         if role == 'teacher':
             if subject_taught is None:
-                raise ValidationError({"subject_taught": "This field is required for teachers."})
+                raise ValidationError( "This field is required for teachers.")
             if experience_years is None:
-                raise ValidationError({"experience_years": "This field is required for teachers."})
+                raise ValidationError("This field is required for teachers.")
              # Validate that the subject exists
             try:
                 subject = Subject.objects.get(name__iexact=subject_taught)
                 attrs['subject_taught'] = subject  # Replace subject name with the Subject instance
             except Subject.DoesNotExist:
-                raise ValidationError({"subject_taught": f"Subject with name '{subject_taught}' does not exist."})
+                raise ValidationError(f"Subject with name '{subject_taught}' does not exist.")
             
         return attrs
     
@@ -161,7 +161,7 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 
     def validate(self, data):
         if data["new_password"] != data["confirm_new_password"]:
-            raise serializers.ValidationError({"new_password": "The two password fields didn't match."})
+            raise serializers.ValidationError( "The two password fields didn't match.")
         return data
     
     def validate_new_password(self, value):
