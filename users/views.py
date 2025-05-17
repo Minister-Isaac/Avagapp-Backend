@@ -51,7 +51,44 @@ class UserViewSet(viewsets.ModelViewSet):
         actions = ["login", "signup"]
         if self.action in actions:
             return [permissions.AllowAny()]
+        if self.action in ["update", "partial_update", "destroy"]:
+            return [permissions.IsAuthenticated()]
         return super().get_permissions()
+
+    def update(self, request, *args, **kwargs):
+        user = self.get_object()
+        roles = [UserType.ADMIN, UserType.TEACHER]
+        # If the requesting user is a student
+        if request.user.role == UserType.STUDENT:
+            # Ensure the student can only delete their own account
+            if user != request.user:
+                return Response(
+                    "You are not authorized to edit this user.",
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        if request.user.role in roles:
+            # Ensure teachers can only edit students
+            if user.role != UserType.STUDENT:
+                return Response("You are not authorized to edit this user.", status=status.HTTP_403_FORBIDDEN)
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        user = self.get_object()
+        roles = [UserType.ADMIN, UserType.TEACHER]
+        # If the requesting user is a student
+        if request.user.role == UserType.STUDENT:
+            # Ensure the student can only delete their own account
+            if user != request.user:
+                return Response(
+                    "You are not authorized to delete this user.",
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+        if request.user.role in roles:
+            # Ensure teachers can only delete students
+            if user.role != UserType.STUDENT:
+                return Response("You are not authorized to delete this user.", status=status.HTTP_403_FORBIDDEN)
+        return super().destroy(request, *args, **kwargs)
     
     @action(methods=["POST"], detail= False, url_path="sign-up")
     def signup(self, request, *args, **kwargs):
