@@ -38,7 +38,7 @@ class SignupSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     confirm_password = serializers.CharField(write_only=True, required=True)
     phone_number = serializers.CharField(required=False)
-    subject_taught = serializers.PrimaryKeyRelatedField(queryset=Subject.objects.all(), required=False)
+    subject_taught = serializers.CharField(required=False)  # Accept subject name as input
     experience_years = serializers.IntegerField(required=False, min_value=0)
     
     class Meta:
@@ -62,7 +62,13 @@ class SignupSerializer(serializers.ModelSerializer):
                 raise ValidationError({"subject_taught": "This field is required for teachers."})
             if experience_years is None:
                 raise ValidationError({"experience_years": "This field is required for teachers."})
-
+             # Validate that the subject exists
+            try:
+                subject = Subject.objects.get(name__iexact=subject_taught)
+                attrs['subject_taught'] = subject  # Replace subject name with the Subject instance
+            except Subject.DoesNotExist:
+                raise ValidationError({"subject_taught": f"Subject with name '{subject_taught}' does not exist."})
+            
         return attrs
     
     def validate_password(self, value):
@@ -92,7 +98,8 @@ class SignupSerializer(serializers.ModelSerializer):
             return user
         except Exception as e:
             raise ValidationError(f"error creating user: {e}")
-        
+
+
 class UserProfileSerializer(serializers.ModelSerializer):
     confirm_password = serializers.CharField(write_only=True, required=True)
     
@@ -185,10 +192,18 @@ class LoginSerializer(serializers.Serializer):
         password = attrs.get("password")
         role = attrs.get("role")
 
+        # Check if the email exists
+        try:
+            user = User.objects.get(email=email)
+        except User.DoesNotExist:
+            raise serializers.ValidationError("No user found with this email address or incorrect email.")
+
+        # Check if the password is correct
         user = authenticate(email=email, password=password)
         if not user:
-            raise serializers.ValidationError("Invalid credentials.")
-
+            raise serializers.ValidationError("Incorrect password.")
+        
+        # Check if the user has the correct role
         if user.role != role:
             raise serializers.ValidationError("User role mismatch.")
 

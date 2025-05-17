@@ -313,3 +313,15 @@ class CertificateGenerationRequestSerializer(serializers.Serializer):
     student_id = serializers.IntegerField(min_value=1)
     course_id = serializers.IntegerField(min_value=1)
 
+
+class StudentAnswerSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StudentAnswer
+        fields = ["student", "question", "selected_option"]
+
+    def create(self, validated_data):
+        # Create the StudentAnswer instance
+        student_answer = StudentAnswer.objects.create(**validated_data)
+
+        # The `save` method in the model will handle updating the student's points
+        return student_answer
