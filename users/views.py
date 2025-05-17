@@ -9,15 +9,23 @@ from django.conf import settings
 from django.utils.http import urlsafe_base64_encode, urlsafe_base64_decode
 from django.utils.encoding import force_bytes, force_str
 from django.contrib.auth.tokens import default_token_generator
+from django.utils import timezone
 
+from avag_learning.paginators import CustomPagination
 from users.choices import UserType
+from users.models import Notification, NotificationRecipient
 
 from .serializers import (
-    ForgotPasswordSerializer, 
+    CreateNotificationSerializer,
+    ForgotPasswordSerializer,
+    LoginSerializer,
+    NotificationSerializer, 
     PasswordResetConfirmSerializer, 
     SignupSerializer, 
     UserProfileSerializer, 
-    UserSerializer
+    UserSerializer,
+    TeacherListSerializer,
+    TeacherDetailSerializer
 )
 
 User = get_user_model()
@@ -57,23 +65,18 @@ class UserViewSet(viewsets.ModelViewSet):
     
     @action(methods=["POST"], detail=False)
     def login(self, request, *args, **kwargs):
-        email = request.data.get("email")
-        password = request.data.get("password")
-        role = request.data.get("role")
+        serializer = LoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
         
-        if not email or not password or not role:
-            return Response({"error": "Email, password and role are required."}, status=status.HTTP_400_BAD_REQUEST)
-        
-        user = authenticate(request, email=email, password=password, role=role)
-
-        if user:
-            refresh = RefreshToken.for_user(user)
-            return Response({
-                "user": UserSerializer(user).data,
-                "refresh": str(refresh),
-                "access": str(refresh.access_token)
-            }, status=status.HTTP_200_OK)
-        return Response({"error": "Invalid credentials."}, status=status.HTTP_401_UNAUTHORIZED)
+        user = serializer.validated_data["user"]
+    
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            "user": UserSerializer(user).data,
+            "refresh": str(refresh),
+            "access": str(refresh.access_token)
+        }, status=status.HTTP_200_OK)
+    
     
     @action(methods=["GET", "PUT"], detail=False, url_path="profile")
     def user_profile(self, request):
@@ -129,13 +132,66 @@ class UserViewSet(viewsets.ModelViewSet):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)      
 
 
-    @action(detail=False, methods=["GET"], url_path="get-users")
-    def get_all_users(self, request):
-        if request.user.role in [UserType.ADMIN or UserType.TEACHER]:
-            users = User.objects.all().order_by("id")
-            serializer = self.get_serializer(users, many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
+    @action(detail=False, methods=["GET"], url_path="get-all-students")
+    def get_all_students(self, request):
+        roles = [UserType.ADMIN, UserType.TEACHER]
+        if request.user.role in roles:
+            users = User.objects.filter(role=UserType.STUDENT).order_by("id")
+            paginator = CustomPagination()
+            paginated_student = paginator.paginate_queryset(users, request, view=self)
+            serializer = self.get_serializer(paginated_student, many=True)
+            return paginator.get_paginated_response(serializer.data)
         return Response(
-            {"detail": "Not authorized to view users."},
+            {"detail": "Not authorized to get student."},
             status=status.HTTP_403_FORBIDDEN
         )
+        
+
+class TeacherViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = User.objects.filter(role='teacher')
+    serializer_class = TeacherListSerializer
+
+    def get_serializer_class(self):
+        if self.action == 'retrieve':
+            return TeacherDetailSerializer
+        return super().get_serializer_class()
+    
+
+
+class NotificationViewSet(viewsets.ModelViewSet):
+    serializer_class = NotificationSerializer
+    queryset = Notification.objects.all()
+    lookup_field = 'id'
+
+    def get_queryset(self):
+        # Students should only see their own notifications
+        if self.request.user.role == "student":
+            return Notification.objects.filter(recipients=self.request.user).order_by('-created_at')
+        # Admins and teachers can see all notifications (you might want to adjust this)
+        return Notification.objects.all().order_by('-created_at')
+
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return CreateNotificationSerializer
+        return super().get_serializer_class()
+
+    def perform_create(self, serializer):
+        serializer.save(sender=self.request.user)
+
+    @action(detail=True, methods=['post'])
+    def mark_as_read(self, request, id=None):
+        user = request.user
+        notification = self.get_object()
+        try:
+            nr = NotificationRecipient.objects.get(notification=notification, user=user)
+            nr.is_read = True
+            nr.read_at = timezone.now()
+            nr.save()
+            return Response({"message": "Notification marked as read."}, status=200)
+        except NotificationRecipient.DoesNotExist:
+            return Response({"error": "Notification not found for this user."}, status=404)
+
+    @action(detail=False, methods=['get'])
+    def unread_count(self, request):
+        count = NotificationRecipient.objects.filter(user=request.user, is_read=False).count()
+        return Response({"unread_count": count})
