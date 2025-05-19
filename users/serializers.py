@@ -248,24 +248,22 @@ class NotificationSerializer(serializers.ModelSerializer):
     
     
 class CreateNotificationSerializer(serializers.ModelSerializer):
-    recipients = serializers.PrimaryKeyRelatedField(
-        queryset=User.objects.all(),
-        many=True,
-    )
 
     class Meta:
         model = Notification
-        fields = ['subject', 'message', 'notification_type', 'link', 'recipients']
+        fields = ["id", "message", "title"]
 
     def create(self, validated_data):
         user = self.context["request"].user
-        roles = [UserType.ADMIN, UserType.TEACHER]
+        roles = [UserType.ADMIN]
         if user.role not in roles:
-            raise serializers.ValidationError("Only admins and teachers can create notifications.")
-        recipients = validated_data.pop('recipients')
+            raise serializers.ValidationError("Only admins can create notifications.")
+       
         notification = Notification.objects.create(**validated_data)
-        # Create NotificationRecipient entries
-        for recipient in recipients:
+        # Assign the notification to all users
+        all_users = User.objects.all()
+        
+        for recipient in all_users:
             NotificationRecipient.objects.create(notification=notification, user=recipient)
 
         return notification

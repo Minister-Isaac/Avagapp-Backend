@@ -1,8 +1,11 @@
 from django.db import models
     
 class QuestionType(models.TextChoices):
-    MULTIPLE_CHOICE = "multiple_choice", "Multiple Choice",
-    FILL_IN_THE_GAP = "fill_in_the_gap", "Fill in the Gap"
+    QUIZ = "quiz", "Quiz",
+    FILL_IN_THE_BLANK = "fill_in_the_blank", "Fill in the blank",
+    DROP_AND_DRAG = "drag_and_drop", "Drag and drop",
+    MATCH_THE_COLUMN = "match_the_column", "Match the column",
+    WORD_HUNT = "word_hunt", "Word hunt",
     
 
 class MediaType(models.TextChoices):

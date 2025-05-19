@@ -1,6 +1,6 @@
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.views import APIView
-from rest_framework import viewsets
+from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
@@ -107,19 +107,27 @@ class KnowledgeTrailViewSet(viewsets.ModelViewSet):
         else:
             return KnowledgeTrail.objects.all().order_by("id")
 
+    @action(detail=False, methods=["GET"], url_path="activity")
+    def get_watched_video(self, request):
+        knowledge_trails = KnowledgeTrail.objects.filter(is_watched=True).order_by("id")[:4]
+        serializer = KnowledgeTrailSerializer(knowledge_trails, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+        
 
 class StudentActivityAPIView(APIView):
 
     def get(self, request):
         user = request.user
 
-        played_games = PlayedGame.objects.filter(student=user).order_by('-played_at')[:4]
-        knowledge_trails = KnowledgeTrail.objects.all().order_by("id")[:4]
-
+        played_games = Game.objects.filter(played_game=True).order_by("id")[:4]
+        knowledge_trails_watched_video = KnowledgeTrail.objects.filter(is_watched=True).order_by("id")[:4]
+        knowledge_trails_pdf = KnowledgeTrail.objects.filter(pdf_file__isnull=False).order_by("id")[:4]
+        
         return Response({
-            "played_games": PlayedGameSerializer(played_games, many=True).data,
-            "knowledge_trails": KnowledgeTrailSerializer(knowledge_trails, many=True).data
-        })
+            "played_games": GameSerializer(played_games, many=True).data,
+            "knowledge_trails_watched_video": KnowledgeTrailSerializer(knowledge_trails_watched_video, many=True).data,
+            "knowledge_trails_pdf": KnowledgeTrailSerializer(knowledge_trails_pdf, many=True).data,
+        }, status=status.HTTP_200_OK)
 
 
 class LeaderboardViewSet(viewsets.ReadOnlyModelViewSet):

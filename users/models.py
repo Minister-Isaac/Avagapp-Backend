@@ -72,6 +72,7 @@ class NotificationRecipient(models.Model):
 
 
 class Notification(BaseModel):
+    title = models.CharField(max_length=255, help_text="The title of the notification.", blank=True)
     recipients = models.ManyToManyField(
         CustomUser,
         through='NotificationRecipient',
@@ -86,24 +87,9 @@ class Notification(BaseModel):
         related_name='sent_notifications',
         help_text="The admin or teacher who created this notification (optional)."
     )
-    subject = models.CharField(
-        max_length=255,
-        help_text="A brief summary or title of the notification."
-    )
     message = models.TextField(
         help_text="The main content or details of the notification."
     )
-    notification_type = models.CharField(
-        max_length=50,
-        blank=True,
-        null=True,
-        help_text="Optional category for the notification (e.g., 'new_feature', 'announcement')."
-    )
-    link = models.URLField(
-        blank=True,
-        null=True,
-        help_text="Optional URL associated with this notification."
-    )
 
     def __str__(self):
-        return f"Subject: {self.subject}"
+        return f"Message: {self.message}"

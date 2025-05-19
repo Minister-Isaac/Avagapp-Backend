@@ -197,15 +197,11 @@ class TeacherViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class NotificationViewSet(viewsets.ModelViewSet):
-    serializer_class = NotificationSerializer
+    serializer_class = CreateNotificationSerializer
     queryset = Notification.objects.all()
     lookup_field = 'id'
 
     def get_queryset(self):
-        # Students should only see their own notifications
-        if self.request.user.role == "student":
-            return Notification.objects.filter(recipients=self.request.user).order_by('-created_at')
-        # Admins and teachers can see all notifications (you might want to adjust this)
         return Notification.objects.all().order_by('-created_at')
 
     def get_serializer_class(self):
@@ -216,23 +212,23 @@ class NotificationViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(sender=self.request.user)
 
-    @action(detail=True, methods=['post'])
-    def mark_as_read(self, request, id=None):
-        user = request.user
-        notification = self.get_object()
-        try:
-            nr = NotificationRecipient.objects.get(notification=notification, user=user)
-            nr.is_read = True
-            nr.read_at = timezone.now()
-            nr.save()
-            return Response({"message": "Notification marked as read."}, status=200)
-        except NotificationRecipient.DoesNotExist:
-            return Response({"error": "Notification not found for this user."}, status=404)
+    # @action(detail=True, methods=['post'])
+    # def mark_as_read(self, request, id=None):
+    #     user = request.user
+    #     notification = self.get_object()
+    #     try:
+    #         nr = NotificationRecipient.objects.get(notification=notification, user=user)
+    #         nr.is_read = True
+    #         nr.read_at = timezone.now()
+    #         nr.save()
+    #         return Response({"message": "Notification marked as read."}, status=200)
+    #     except NotificationRecipient.DoesNotExist:
+    #         return Response({"error": "Notification not found for this user."}, status=404)
 
-    @action(detail=False, methods=['get'])
-    def unread_count(self, request):
-        count = NotificationRecipient.objects.filter(user=request.user, is_read=False).count()
-        return Response({"unread_count": count})
+    # @action(detail=False, methods=['get'])
+    # def unread_count(self, request):
+    #     count = NotificationRecipient.objects.filter(user=request.user, is_read=False).count()
+    #     return Response({"unread_count": count})
     
 
 class StudentProfileViewSet(viewsets.ModelViewSet):

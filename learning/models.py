@@ -30,8 +30,8 @@ class Question(BaseModel):
     question_type = models.CharField(
         max_length=50,
         choices=QuestionType.choices,
-        default=QuestionType.MULTIPLE_CHOICE,
-        help_text="The type of question (e.g., multiple choice, fill in the gap)."
+        default=QuestionType.QUIZ,
+        help_text="The type of question (e.g., quit, fill in the blank etc)."
         )
     points = models.PositiveIntegerField(
         default=1,
@@ -58,12 +58,11 @@ class StudentAnswer(BaseModel):
     student = models.ForeignKey(User, on_delete=models.CASCADE)
     question = models.ForeignKey(Question, on_delete=models.CASCADE)
     selected_option = models.ForeignKey(Option, on_delete=models.CASCADE, null=True, blank=True)
-    typed_answer = models.TextField(null=True, blank=True, help_text="The student's answer for 'fill in the gap' questions.")
-    
+    typed_answer = models.TextField(null=True, blank=True, help_text="The student's answer for 'fill in the blank' questions.")
     
     def save(self, *args, **kwargs):
-         # Check if the question is 'fill in the gap'
-        if self.question.question_type == QuestionType.FILL_IN_THE_GAP:
+         # Check if the question is 'fill in the blank'
+        if self.question.question_type == QuestionType.FILL_IN_THE_BLANK:
             # Compare the student's typed answer with the correct answer
             if self.typed_answer and self.question.correct_answer:
                 # Normalize answers (case-insensitive and strip whitespace)
@@ -74,12 +73,6 @@ class StudentAnswer(BaseModel):
                     student_profile.points += self.question.points
                     student_profile.save()
                     
-                else:
-                    # Get or create the student's profile
-                    student_profile, created = StudentProfile.objects.get_or_create(student=self.student)
-                    # Add the question's points to the student's points
-                    student_profile.points = 0
-                    student_profile.save()
                     
         # Check if the selected option is correct
         else:
@@ -108,6 +101,8 @@ class KnowledgeTrail(BaseModel):
     thumbnail = models.ImageField(upload_to="knowledge_thumbnails/", null=True, blank=True)
     description = models.TextField(blank=True)
     note = models.TextField(null=True, blank=True)
+    recommended = models.BooleanField(default=False)
+    is_watched = models.BooleanField(default=False)
 
     def __str__(self):
         return f"{self.title} - {self.assigned_by} - {self.title}"
@@ -134,19 +129,18 @@ class Achievement(BaseModel):
 
 class Game(BaseModel):
     title = models.CharField(max_length=255)
-    description = models.TextField(blank=True)
-    thumbnail = models.ImageField(upload_to='game_thumbnails/', null=True, blank=True)
-    max_score = models.IntegerField(default=100)
     reward_points = models.PositiveIntegerField(default=10)
     badges_awarded = models.CharField(max_length=255, blank=True, help_text="Comma-separated badge names if any")
     questions = models.ManyToManyField('Question', related_name='games', blank=True)
-
+    played_game = models.BooleanField(default=False)
+    thumbnail = models.ImageField(upload_to="game_thumbnails/", null=True, blank=True)
+    
     def __str__(self):
         return self.title
     
     @property
     def reward_points(self):
-        return self.questions.aggregate(total_points=models.Sum('points'))['total_points'] or 0
+        return self.questions.aggregate(total_points=models.Sum("points"))["total_points"] or 0
 
 
 class PlayedGame(BaseModel):
