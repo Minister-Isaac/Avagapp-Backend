@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     StudentDashboardAPIView, KnowledgeTrailViewSet,
     LeaderboardViewSet, StudentActivityAPIView, QuestionViewSet,
-    OptionalViewSet,GameViewSet, StudentAnswerViewSet
+    OptionalViewSet,GameViewSet, StudentAnswerViewSet, SubjectViestSet
     )
 
 
@@ -14,6 +14,7 @@ router.register(r"knowledge-trail", KnowledgeTrailViewSet, basename="knowledge-t
 router.register(r'leaderboard', LeaderboardViewSet, basename='leaderboard')
 router.register(r"games", GameViewSet, basename="games")
 router.register(r"student-answers", StudentAnswerViewSet, basename="student-answers")
+router.register(r"subjects", SubjectViestSet, basename="subjects")
 
 
 urlpatterns = [

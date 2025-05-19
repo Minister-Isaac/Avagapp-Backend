@@ -179,7 +179,7 @@ class PasswordResetConfirmSerializer(serializers.Serializer):
 class StudentProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = StudentProfile
-        fields = ["points", "medals", "level", "activities_completed"]
+        fields = "__all__"
         
 
 class LoginSerializer(serializers.Serializer):
