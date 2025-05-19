@@ -37,11 +37,11 @@ class Question(BaseModel):
         default=1,
         help_text="Points awarded for correctly answering this question."
         )
-    # correct_answer = models.TextField(
-    #     null=True,
-    #     blank=True,
-    #     help_text="The correct answer for 'fill in the gap' questions."
-    # )
+    correct_answer = models.TextField(
+        null=True,
+        blank=True,
+        help_text="The correct answer for 'fill in the gap' questions."
+    )
     
 
 class Option(BaseModel):
@@ -57,16 +57,39 @@ class Option(BaseModel):
 class StudentAnswer(BaseModel):
     student = models.ForeignKey(User, on_delete=models.CASCADE)
     question = models.ForeignKey(Question, on_delete=models.CASCADE)
-    selected_option = models.ForeignKey(Option, on_delete=models.CASCADE)
+    selected_option = models.ForeignKey(Option, on_delete=models.CASCADE, null=True, blank=True)
+    typed_answer = models.TextField(null=True, blank=True, help_text="The student's answer for 'fill in the gap' questions.")
+    
     
     def save(self, *args, **kwargs):
+         # Check if the question is 'fill in the gap'
+        if self.question.question_type == QuestionType.FILL_IN_THE_GAP:
+            # Compare the student's typed answer with the correct answer
+            if self.typed_answer and self.question.correct_answer:
+                # Normalize answers (case-insensitive and strip whitespace)
+                if self.typed_answer.strip().lower() == self.question.correct_answer.strip().lower():
+                    # Get or create the student's profile
+                    student_profile, created = StudentProfile.objects.get_or_create(student=self.student)
+                    # Add the question's points to the student's points
+                    student_profile.points += self.question.points
+                    student_profile.save()
+                    
+                else:
+                    # Get or create the student's profile
+                    student_profile, created = StudentProfile.objects.get_or_create(student=self.student)
+                    # Add the question's points to the student's points
+                    student_profile.points = 0
+                    student_profile.save()
+                    
         # Check if the selected option is correct
-        if self.selected_option.is_correct:
-            # Get the student's profile
-            student_profile, created = StudentProfile.objects.get_or_create(student=self.student)
-            # Add the question's points to the student's points
-            student_profile.points += self.question.points
-            student_profile.save()
+        else:
+            # For other question types, check if the selected option is correct
+            if self.selected_option and self.selected_option.is_correct:
+                # Get the student's profile
+                student_profile, created = StudentProfile.objects.get_or_create(student=self.student)
+                # Add the question's points to the student's points
+                student_profile.points += self.question.points
+                student_profile.save()
         super().save(*args, **kwargs)
         
 
@@ -80,8 +103,8 @@ class KnowledgeTrail(BaseModel):
     title = models.CharField(max_length=255)
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name="knowledge_items")
     assigned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
-    media_type = models.CharField(max_length=10, choices=MediaType.choices, default=MediaType.VIDEO)
-    media_file = models.FileField(upload_to="knowledge_media/", null=True, blank=True)
+    pdf_file = models.FileField(upload_to="knowledge_pdf_media/", null=True, blank=True)
+    video_file = models.FileField(upload_to="knowledge_video_media/", null=True, blank=True)
     thumbnail = models.ImageField(upload_to="knowledge_thumbnails/", null=True, blank=True)
     description = models.TextField(blank=True)
     note = models.TextField(null=True, blank=True)
