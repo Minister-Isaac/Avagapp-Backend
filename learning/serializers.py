@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from learning.choices import QuestionType
 from users.choices import UserType
 from users.models import StudentProfile
 # from users.serializers import UserSerializer
@@ -57,7 +58,7 @@ class QuestionSerializer(serializers.ModelSerializer):
     options = OptionSerializer(many=True, required=False)
     class Meta:
         model = Question
-        fields = ["id", "question_text", "question_type", "points", "options"]
+        fields = ["id", "question_text", "question_type", "points", "options", "correct_answer"]
 
         
 class GameSerializer(serializers.ModelSerializer):
@@ -65,7 +66,7 @@ class GameSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Game
-        fields = ["title", "description", "thumbnail", "max_score", "badges_awarded", "questions"]
+        fields = ["id", "title",  "badges_awarded", "questions"]
 
         
     def create(self, validated_data):
@@ -82,13 +83,26 @@ class GameSerializer(serializers.ModelSerializer):
         
         #create the questions and associate them with the game
         for question_data in questions_data:
-            options_data = question_data.pop("options")
-            question = Question.objects.create(**question_data)
-            question.games.add(game)  # Associate the question with the game
+            question_type = question_data.get("question_type")
             
-            # Create the options and associate them with the question
-            for option_data in options_data:
-                Option.objects.create(question=question, **option_data)
+            if question_type == QuestionType.FILL_IN_THE_BLANK:
+                print(question_data)
+                # For FILL_IN_THE_BLANK, set the correct_answer field
+                correct_answer = question_data.pop("correct_answer", None)
+                if not correct_answer:
+                    raise serializers.ValidationError(
+                        {"correct_answer": "This field is required for FILL_IN_THE_BLANK questions."}
+                    )
+                question = Question.objects.create(**question_data, correct_answer=correct_answer)
+            else:    
+                options_data = question_data.pop("options")
+                question = Question.objects.create(**question_data)
+                
+                # Create the options and associate them with the question
+                for option_data in options_data:
+                    Option.objects.create(question=question, **option_data)
+                    
+            question.games.add(game)  # Associate the question with the game
         return game
 
 
@@ -113,7 +127,7 @@ class KnowledgeTrailSerializer(serializers.ModelSerializer):
 class BadgeSerializer(serializers.ModelSerializer):
     class Meta:
         model = Badge
-        fields = ["name", "description", "image"]
+        fields = ["id", "name", "description", "image"]
 
 
 class AchievementSerializer(serializers.ModelSerializer):
@@ -125,31 +139,33 @@ class AchievementSerializer(serializers.ModelSerializer):
 
 
 class KnowledgeTrailSerializer(serializers.ModelSerializer):
-    subject_name = serializers.CharField(source='subject.name', read_only=True)
-    assigned_by_name = serializers.CharField(source='assigned_by.first_name', read_only=True)
+    subject_name = serializers.CharField(source="subject.name", read_only=True)
+    assigned_by_name = serializers.CharField(source="assigned_by.first_name", read_only=True)
     media_url = serializers.SerializerMethodField()
 
     class Meta:
         model = KnowledgeTrail
         fields = [
-            'id',
-            'title',
-            'subject',
-            'subject_name',
-            'assigned_by_name',
-            'media_url',
+            "id",
+            "title",
+            "subject",
+            "subject_name",
+            "assigned_by_name",
+            "media_url",
             "pdf_file",
             "video_file",
-            'thumbnail',
-            'description'
+            "thumbnail",
+            "description",
+            "recommended",
+            "is_watched",
         ]
 
     def validate(self, data):
         pdf_file = data.get("pdf_file")
         video_file = data.get("video_file")
         
-        if pdf_file and video_file:
-            raise serializers.ValidationError("You can either upload video or pdf file.")
+        # if pdf_file and video_file:
+        #     raise serializers.ValidationError("You can either upload video or pdf file.")
         if pdf_file:
             if not self.is_pdf(pdf_file):
                 raise serializers.ValidationError("Only PDF files are allowed.")
