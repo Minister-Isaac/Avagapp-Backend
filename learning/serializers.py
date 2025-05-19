@@ -125,7 +125,7 @@ class AchievementSerializer(serializers.ModelSerializer):
 
 
 class KnowledgeTrailSerializer(serializers.ModelSerializer):
-    # subject_name = serializers.CharField(source='subject.name', read_only=True)
+    subject_name = serializers.CharField(source='subject.name', read_only=True)
     assigned_by_name = serializers.CharField(source='assigned_by.first_name', read_only=True)
     media_url = serializers.SerializerMethodField()
 
@@ -135,6 +135,7 @@ class KnowledgeTrailSerializer(serializers.ModelSerializer):
             'id',
             'title',
             'subject',
+            'subject_name',
             'assigned_by_name',
             'media_url',
             "pdf_file",
