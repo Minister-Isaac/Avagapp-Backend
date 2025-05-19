@@ -37,6 +37,11 @@ class Question(BaseModel):
         default=1,
         help_text="Points awarded for correctly answering this question."
         )
+    # correct_answer = models.TextField(
+    #     null=True,
+    #     blank=True,
+    #     help_text="The correct answer for 'fill in the gap' questions."
+    # )
     
 
 class Option(BaseModel):

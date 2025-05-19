@@ -57,7 +57,7 @@ class QuestionSerializer(serializers.ModelSerializer):
     options = OptionSerializer(many=True, required=False)
     class Meta:
         model = Question
-        fields = ["question_text", "question_type", "points", "options"]
+        fields = ["id", "question_text", "question_type", "points", "options"]
 
         
 class GameSerializer(serializers.ModelSerializer):

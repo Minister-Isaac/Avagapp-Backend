@@ -13,7 +13,7 @@ from django.utils import timezone
 
 from avag_learning.paginators import CustomPagination
 from users.choices import UserType
-from users.models import Notification, NotificationRecipient
+from users.models import Notification, NotificationRecipient, StudentProfile
 
 from .serializers import (
     CreateNotificationSerializer,
@@ -21,7 +21,8 @@ from .serializers import (
     LoginSerializer,
     NotificationSerializer, 
     PasswordResetConfirmSerializer, 
-    SignupSerializer, 
+    SignupSerializer,
+    StudentProfileSerializer, 
     UserProfileSerializer, 
     UserSerializer,
     TeacherListSerializer,
@@ -232,3 +233,21 @@ class NotificationViewSet(viewsets.ModelViewSet):
     def unread_count(self, request):
         count = NotificationRecipient.objects.filter(user=request.user, is_read=False).count()
         return Response({"unread_count": count})
+    
+
+class StudentProfileViewSet(viewsets.ModelViewSet):
+    queryset = StudentProfile.objects.select_related("student").all()
+    serializer_class = StudentProfileSerializer
+
+    def get_queryset(self):
+        # Students can only access their own profile
+        if self.request.user.role == "student":
+            return StudentProfile.objects.filter(student=self.request.user)
+        # Admins and teachers can access all profiles
+        return super().get_queryset()
+
+    def retrieve(self, request, *args, **kwargs):
+        # Ensure students can only retrieve their own profile
+        if request.user.role == "student" and kwargs.get("pk") != str(request.user.profile.id):
+            return Response({"error": "You are not authorized to access this profile."}, status=403)
+        return super().retrieve(request, *args, **kwargs)
