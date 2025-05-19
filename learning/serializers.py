@@ -136,16 +136,40 @@ class KnowledgeTrailSerializer(serializers.ModelSerializer):
             'title',
             'subject',
             'assigned_by_name',
-            'media_type',
             'media_url',
+            "pdf_file",
+            "video_file",
             'thumbnail',
             'description'
         ]
 
+    def validate(self, data):
+        pdf_file = data.get("pdf_file")
+        video_file = data.get("video_file")
+        
+        if pdf_file and video_file:
+            raise serializers.ValidationError("You can either upload video or pdf file.")
+        if pdf_file:
+            if not self.is_pdf(pdf_file):
+                raise serializers.ValidationError("Only PDF files are allowed.")
+        if video_file:
+            if not self.is_video(video_file):
+                raise serializers.ValidationError("Only video files are allowed (mp4, avi, mov, mkv, webm).")
+        return data
+    
+    def is_pdf(self, value):
+        return value.name.lower().endswith('.pdf')
+
+    def is_video(self, value):
+        video_extensions = ['.mp4', '.avi', '.mov', '.mkv', '.webm']
+        return value.name.lower().endswith(tuple(video_extensions))
+
     def get_media_url(self, obj):
         request = self.context.get('request')
-        if obj.media_file and request:
-            return request.build_absolute_uri(obj.media_file.url)
+        if obj.pdf_file and request:
+            return request.build_absolute_uri(obj.pdf_file.url)
+        elif obj.video_file and request:
+            return request.build_absolute_uri(obj.video_file.url)
         return None
     
     def create(self, validated_data):
@@ -156,7 +180,7 @@ class KnowledgeTrailSerializer(serializers.ModelSerializer):
         
         # Assign the current user as the 'assigned_by' field
         validated_data["assigned_by"] = request.user
-        
+
         return super().create(validated_data)
 
 
@@ -317,7 +341,7 @@ class CertificateGenerationRequestSerializer(serializers.Serializer):
 class StudentAnswerSerializer(serializers.ModelSerializer):
     class Meta:
         model = StudentAnswer
-        fields = ["student", "question", "selected_option"]
+        fields = "__all__"
 
     def create(self, validated_data):
         # Create the StudentAnswer instance
