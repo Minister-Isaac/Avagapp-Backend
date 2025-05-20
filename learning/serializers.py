@@ -164,8 +164,8 @@ class KnowledgeTrailSerializer(serializers.ModelSerializer):
         pdf_file = data.get("pdf_file")
         video_file = data.get("video_file")
         
-        # if pdf_file and video_file:
-        #     raise serializers.ValidationError("You can either upload video or pdf file.")
+        if pdf_file and video_file:
+            raise serializers.ValidationError("You can either upload video or pdf file.")
         if pdf_file:
             if not self.is_pdf(pdf_file):
                 raise serializers.ValidationError("Only PDF files are allowed.")
