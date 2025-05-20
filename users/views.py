@@ -185,8 +185,8 @@ class UserViewSet(viewsets.ModelViewSet):
         )
         
 
-class TeacherViewSet(viewsets.ReadOnlyModelViewSet):
-    queryset = User.objects.filter(role='teacher')
+class TeacherViewSet(viewsets.ModelViewSet):
+    queryset = User.objects.filter(role="teacher").order_by("id")
     serializer_class = TeacherListSerializer
 
     def get_serializer_class(self):
@@ -194,6 +194,51 @@ class TeacherViewSet(viewsets.ReadOnlyModelViewSet):
             return TeacherDetailSerializer
         return super().get_serializer_class()
     
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == UserType.TEACHER:
+            # If the requesting user is a teacher, ensure they can only update their own account
+            
+            if user != user:
+                return Response(
+                    {"error": "You are not authorized to edit this user."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            else:
+                # Teachers can only see themselves
+                return User.objects.filter(email=user.email).order_by("id")
+        
+        return super().get_queryset()
+    
+    def update(self, request, *args, **kwargs):
+        user = self.get_object()
+        # Allow admins to update any teacher
+        if request.user.role == UserType.ADMIN:
+            return super().update(request, *args, **kwargs)
+
+        # If the requesting user is a teacher, ensure they can only update their own account
+        if request.user.role == UserType.TEACHER:
+            if user != request.user:
+                return Response(
+                    {"error": "You are not authorized to edit this user."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        return super().update(request, *args, **kwargs)
+
+    def destroy(self, request, *args, **kwargs):
+        user = self.get_object()
+        # Allow admins to delete any teacher
+        if request.user.role == UserType.ADMIN:
+            return super().destroy(request, *args, **kwargs)
+
+        # If the requesting user is a teacher, ensure they can only delete their own account
+        if request.user.role == UserType.TEACHER:
+            if user != request.user:
+                return Response(
+                    {"error": "You are not authorized to delete this user."},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        return super().destroy(request, *args, **kwargs)
 
 
 class NotificationViewSet(viewsets.ModelViewSet):
