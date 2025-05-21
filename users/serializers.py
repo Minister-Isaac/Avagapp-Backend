@@ -256,10 +256,15 @@ class NotificationSerializer(serializers.ModelSerializer):
     
     
 class CreateNotificationSerializer(serializers.ModelSerializer):
-
+    recipient_roles = serializers.CharField(
+        write_only=True,
+        required=True,
+        help_text="Specify the roles to send the notification to (e.g., ['teacher', 'student' 'both'])."
+    )
+    
     class Meta:
         model = Notification
-        fields = ["id", "message", "title"]
+        fields = ["id", "message", "title", "recipient_roles"]
 
     def create(self, validated_data):
         user = self.context["request"].user
@@ -267,11 +272,27 @@ class CreateNotificationSerializer(serializers.ModelSerializer):
         if user.role not in roles:
             raise serializers.ValidationError("Only admins can create notifications.")
        
-        notification = Notification.objects.create(**validated_data)
-        # Assign the notification to all users
-        all_users = User.objects.all()
+       # Extract recipient roles and remove from validated_data
+        recipient_roles = validated_data.pop("recipient_roles")
         
-        for recipient in all_users:
-            NotificationRecipient.objects.create(notification=notification, user=recipient)
 
+        notification = Notification.objects.create(**validated_data)
+        # # Assign the notification to all users
+        # all_users = User.objects.all()
+        
+        # Determine recipient roles
+        if recipient_roles == "both":
+            recipient_roles = [UserType.STUDENT, UserType.TEACHER]
+        elif recipient_roles == "student":
+            recipient_roles = [UserType.STUDENT]
+        elif recipient_roles == "teacher":
+            recipient_roles = [UserType.TEACHER]
+        else:
+            raise serializers.ValidationError("Invalid recipient roles. Use 'student', 'teacher', or 'both'.")
+        
+        # Filter users based on recipient roles
+        recipients = User.objects.filter(role__in=recipient_roles)
+        for recipient in recipients:
+            NotificationRecipient.objects.create(notification=notification, user=recipient)
+            
         return notification
