@@ -166,4 +166,11 @@ class UserAttendance(BaseModel):
 
     def __str__(self):
         return f"{self.student.first_name} - {self.date}"
-    
+
+
+class Statistics(models.Model):
+    students = models.IntegerField(default=0)
+    teachers = models.IntegerField(default=0)
+    knowledge_trail_videos = models.IntegerField(default=0)
+    knowledge_trail_pdfs = models.IntegerField(default=0)
+    last_updated = models.DateTimeField(auto_now=True)

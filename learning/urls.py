@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    StudentDashboardAPIView, KnowledgeTrailViewSet,
+    StatisticsViewSet, StudentDashboardAPIView, KnowledgeTrailViewSet,
     LeaderboardViewSet, StudentActivityAPIView, QuestionViewSet,
     OptionalViewSet,GameViewSet, StudentAnswerViewSet, SubjectViestSet
     )
@@ -15,6 +15,8 @@ router.register(r'leaderboard', LeaderboardViewSet, basename='leaderboard')
 router.register(r"games", GameViewSet, basename="games")
 router.register(r"student-answers", StudentAnswerViewSet, basename="student-answers")
 router.register(r"subjects", SubjectViestSet, basename="subjects")
+router.register(r'statistics', StatisticsViewSet, basename='statistics')
+
 
 
 urlpatterns = [

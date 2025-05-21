@@ -221,10 +221,18 @@ class TeacherListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'full_name', 'email', 'subject', 'experience']
+        fields = ["id", "full_name", "email", "subject", "experience", "first_name", "last_name", "avatar"]
 
     def get_full_name(self, obj):
         return f"{obj.first_name} {obj.last_name}"
+    
+    def update(self, instance, validated_data):
+        # Update first_name and last_name if provided
+        instance.first_name = validated_data.get("first_name", instance.first_name)
+        instance.last_name = validated_data.get("last_name", instance.last_name)
+        instance.save()
+        return instance
+    
 
 class TeacherDetailSerializer(serializers.ModelSerializer):
     subject = SubjectSerializer(source='subject_taught', read_only=True)
