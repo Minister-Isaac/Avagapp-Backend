@@ -247,7 +247,8 @@ class NotificationViewSet(viewsets.ModelViewSet):
     lookup_field = 'id'
 
     def get_queryset(self):
-        return Notification.objects.all().order_by('-created_at')
+        user = self.request.user
+        return Notification.objects.filter(recipients=user).order_by('-created_at')
 
     def get_serializer_class(self):
         if self.action == 'create':
