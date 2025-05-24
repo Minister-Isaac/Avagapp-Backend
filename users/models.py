@@ -54,7 +54,6 @@ class StudentProfile(models.Model):
     student = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name="profile")
     points = models.IntegerField(default=0)
     medals = models.IntegerField(default=0)
-    level = models.PositiveIntegerField(default=1)
     activities_completed = models.PositiveIntegerField(default=0)
 
     def __str__(self):
