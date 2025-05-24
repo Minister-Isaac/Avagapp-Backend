@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth import get_user_model
+from django.utils.timezone import now
 
 from avag_learning.models.models import BaseModel
 from learning.choices import  MediaType, QuestionType
@@ -113,15 +114,30 @@ class StudentAnswer(BaseModel):
 
                 # Calculate the percentage score
                 percentage_score = (correct_answers / total_questions) * 100
-                print(f"Percentage Score: {percentage_score}%")
-                print(f"Game: {game.title}, Total Questions: {total_questions}, Correct Answers: {correct_answers}")
-
+                
                 # Check if the student has achieved a medal
                 if percentage_score >= 80:
                     # Award a medal to the student
                     student_profile, created = StudentProfile.objects.get_or_create(student=self.student)
                     student_profile.medals += 1
                     student_profile.save()    
+                
+                # Create or update the PlayedGame record
+                played_game, created = PlayedGame.objects.get_or_create(
+                    student=self.student,
+                    game=game,
+                    defaults={
+                        "score": percentage_score,
+                        "completed": True,
+                        "played_at": now()
+                    }
+                )
+                if not created:
+                    # Update the existing PlayedGame record if it already exists
+                    played_game.score = percentage_score
+                    played_game.completed = True
+                    played_game.played_at = now()
+                    played_game.save()
 
 
 class Certificate(BaseModel):
@@ -211,4 +227,8 @@ class Statistics(models.Model):
     teachers = models.IntegerField(default=0)
     knowledge_trail_videos = models.IntegerField(default=0)
     knowledge_trail_pdfs = models.IntegerField(default=0)
+    certificates_issued = models.IntegerField(default=0)
+    student_points = models.IntegerField(default=0)
+    student_medals = models.IntegerField(default=0)
     last_updated = models.DateTimeField(auto_now=True)
+    last_certificate_check = models.DateTimeField(default=now)

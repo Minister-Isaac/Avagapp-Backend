@@ -253,13 +253,12 @@ class StudentLeaderboardSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source='student.first_name', read_only=True)
     profileImageUrl = serializers.SerializerMethodField()
     score = serializers.SerializerMethodField()
-    level = serializers.IntegerField(source='profile.level', read_only=True)
     attendance = serializers.SerializerMethodField()
     lastActivity = serializers.SerializerMethodField()
 
     class Meta:
         model = StudentProfile
-        fields = ['rank', 'studentId', 'name', 'profileImageUrl', 'score', 'level', 'attendance', 'lastActivity']
+        fields = ['rank', 'studentId', 'name', 'profileImageUrl', 'score', 'attendance', 'lastActivity']
 
     def get_profileImageUrl(self, obj):
         return obj.student.avatar.url if obj.student.avatar else "/static/images/default_avatar.png" # Adjust path as needed
