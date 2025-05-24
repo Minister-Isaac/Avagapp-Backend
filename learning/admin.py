@@ -2,10 +2,12 @@ from django.contrib import admin
 from unfold.admin import ModelAdmin
 
 from .models import (Badge, Certificate, Institution, KnowledgeTrail,
-                    Option, Question,
+                    Option, Question,PlayedGame,
                     StudentAnswer, Subject, Topic, Achievement)
  
 
+
+@admin.register(PlayedGame)
 @admin.register(Badge)
 @admin.register(Achievement)
 @admin.register(Certificate)

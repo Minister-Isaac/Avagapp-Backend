@@ -68,6 +68,9 @@ class StudentProfileMedalTest(TestCase):
             last_name="Doe",
             role=UserType.STUDENT
         )
+        # Get or create a student profile
+        self.student_profile, created = StudentProfile.objects.get_or_create(student=self.student)
+
         self.game = Game.objects.create(title="Sample Game")
 
         self.question1 = Question.objects.create(
@@ -78,6 +81,7 @@ class StudentProfileMedalTest(TestCase):
             question_type=QuestionType.QUIZ,
             points=10
         )
+        
         self.game.questions.add(self.question1, self.question2)
 
         self.option1_correct = Option.objects.create(
@@ -90,6 +94,11 @@ class StudentProfileMedalTest(TestCase):
             option_text  ="Paris",
             is_correct=True
         )
+        self.option2_incorrect = Option.objects.create(
+        question=self.question2,
+        option_text="London",
+        is_correct=False
+    )
 
     def test_award_medal_for_80_percent_score(self):
         StudentAnswer.objects.create(
@@ -103,26 +112,28 @@ class StudentProfileMedalTest(TestCase):
             selected_option=self.option2_correct
         )
 
-        profile = StudentProfile.objects.get(student=self.student)
-        self.assertEqual(profile.points, 20)
-        self.assertEqual(profile.medals, 1)
+        
+        # Check if the student was not awarded a medal
+        self.student_profile.refresh_from_db()
+        self.assertEqual(self.student_profile.points, 20)
+        self.assertEqual(self.student_profile.medals, 1)
 
-    # def test_no_medal_for_less_than_80_percent_score(self):
-    #     # Student answers the first question correctly
-    #     StudentAnswer.objects.create(
-    #         student=self.student,
-    #         question=self.question1,
-    #         selected_option=self.option1_correct
-    #     )
+    def test_no_medal_for_less_than_80_percent_score(self):
+        # Student answers the first question correctly
+        StudentAnswer.objects.create(
+            student=self.student,
+            question=self.question1,
+            selected_option=self.option1_correct
+        )
 
-    #     # Student answers the second question incorrectly
-    #     StudentAnswer.objects.create(
-    #         student=self.student,
-    #         question=self.question2,
-    #         selected_option=self.option2_incorrect
-    #     )
+        # Student answers the second question incorrectly
+        StudentAnswer.objects.create(
+            student=self.student,
+            question=self.question2,
+            selected_option=self.option2_incorrect
+        )
 
-    #     # Check if the student was not awarded a medal
-    #     self.student_profile.refresh_from_db()
-    #     self.assertEqual(self.student_profile.medals, 0)
-    #     self.assertEqual(self.student_profile.points, 10)
+        # Check if the student was not awarded a medal
+        self.student_profile.refresh_from_db()
+        self.assertEqual(self.student_profile.medals, 0)
+        self.assertEqual(self.student_profile.points, 10)

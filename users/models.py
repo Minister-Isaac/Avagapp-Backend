@@ -50,7 +50,7 @@ class CustomUser(AbstractBaseUser, PermissionsMixin, BaseModel):
         return f"{self.first_name} {self.last_name} ({self.email})"
 
  
-class StudentProfile(models.Model):
+class StudentProfile(BaseModel):
     student = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name="profile")
     points = models.IntegerField(default=0)
     medals = models.IntegerField(default=0)
