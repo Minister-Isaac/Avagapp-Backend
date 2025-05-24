@@ -240,7 +240,12 @@ class TeacherDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'first_name', 'last_name', 'email', 'subject', 'experience', 'phone_number', 'institution', 'avatar']
+        fields = [
+            "id", "first_name",
+            "last_name", "email",
+            "subject", "experience",
+            "phone_number", "institution",
+            "avatar", "created_at",]
         
 
 class NotificationSerializer(serializers.ModelSerializer):
@@ -268,7 +273,7 @@ class CreateNotificationSerializer(serializers.ModelSerializer):
 
     def create(self, validated_data):
         user = self.context["request"].user
-        roles = [UserType.ADMIN]
+        roles = [UserType.ADMIN, UserType.TEACHER]
         if user.role not in roles:
             raise serializers.ValidationError("Only admins can create notifications.")
        

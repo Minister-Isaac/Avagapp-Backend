@@ -51,7 +51,7 @@ class InstitutionSerializer(serializers.ModelSerializer):
 class OptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Option
-        fields = ["option_text", "is_correct"]
+        fields = ["id", "option_text", "is_correct"]
 
      
 class QuestionSerializer(serializers.ModelSerializer):
@@ -86,7 +86,7 @@ class GameSerializer(serializers.ModelSerializer):
             question_type = question_data.get("question_type")
             
             if question_type == QuestionType.FILL_IN_THE_BLANK:
-                print(question_data)
+
                 # For FILL_IN_THE_BLANK, set the correct_answer field
                 correct_answer = question_data.pop("correct_answer", None)
                 if not correct_answer:
@@ -349,10 +349,6 @@ class StudentForCertificateSerializer(serializers.ModelSerializer):
     def get_performance(self, obj):
         # TODO Implement logic to calculate performance (e.g., based on completed activities, quiz scores)
         return 0.90  # Placeholder
-
-class CertificateGenerationRequestSerializer(serializers.Serializer):
-    student_id = serializers.IntegerField(min_value=1)
-    course_id = serializers.IntegerField(min_value=1)
 
 
 class StudentAnswerSerializer(serializers.ModelSerializer):

@@ -247,6 +247,24 @@ class CertificateViewSet(viewsets.ViewSet):
         except User.DoesNotExist:
             return Response({"error": "Student not found."}, status=status.HTTP_404_NOT_FOUND)
 
+        return self._generate_certificate_for_student(student, request)
+    
+    @action(detail=False, methods=["POST"], url_path="generate-certificates-for-all")
+    def generate_certificates_for_all(self, request):
+        # Ensure the requesting user is a teacher
+        if request.user.role != UserType.TEACHER:
+            return Response({"error": "Only teachers can generate certificates."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Get all students
+        students = User.objects.filter(role=UserType.STUDENT)
+
+        # Generate certificates for each student
+        for student in students:
+            self._generate_certificate_for_student(student, request)
+
+        return Response({"message": "Certificates generated successfully for all students."}, status=status.HTTP_201_CREATED)
+    
+    def _generate_certificate_for_student(self, student, request):
         # Generate the PDF
         buffer = BytesIO()
         pdf = canvas.Canvas(buffer, pagesize=letter)
@@ -308,5 +326,5 @@ class CertificateViewSet(viewsets.ViewSet):
         certificate = Certificate.objects.create(student=student, file=pdf_file)
         buffer.close()
         
-        return Response({"message": "Certificate generated successfully.", "certificate_url": certificate.file.url}, status=status.HTTP_201_CREATED)
+        return Response({"message": f"Certificate generated successfully. for {student.first_name} {student.last_name}", "certificate_url": certificate.file.url}, status=status.HTTP_201_CREATED)
     
