@@ -61,6 +61,15 @@ class GameViewSet(viewsets.ModelViewSet):
     serializer_class = GameSerializer
     queryset = Game.objects.all().order_by("id")
     
+class PlayedGameViewSet(viewsets.ModelViewSet):
+    serializer_class = PlayedGameSerializer
+    queryset = PlayedGame.objects.all().order_by("id")
+    
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == UserType.STUDENT:
+            return PlayedGame.objects.filter(student=user)
+        return super().get_queryset()
 
 class StudentDashboardAPIView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -147,38 +156,6 @@ class StudentActivityAPIView(APIView):
         }, status=status.HTTP_200_OK)
 
 
-# class LeaderboardViewSet(viewsets.ReadOnlyModelViewSet):
-#     serializer_class = StudentLeaderboardSerializer
-#     queryset = StudentProfile.objects.select_related('student')
-
-#     def list(self, request, *args, **kwargs):
-#         queryset = self.get_queryset().annotate(total_score=Sum('student__playedgame__score')).order_by('-total_score')
-
-#         limit = request.query_params.get('limit', 50)
-#         page = request.query_params.get('page', 1)
-
-#         paginator = Paginator(queryset, limit)
-#         try:
-#             leaderboard_page = paginator.page(page)
-#         except PageNotAnInteger:
-#             leaderboard_page = paginator.page(1)
-#         except EmptyPage:
-#             leaderboard_page = Paginator([], limit).page(1)
-
-#         serializer = self.get_serializer(leaderboard_page, many=True)
-#         ranked_data = []
-#         base_rank = (int(page) - 1) * int(limit)
-#         for i, item in enumerate(serializer.data):
-#             item['rank'] = base_rank + i + 1
-#             ranked_data.append(item)
-
-#         return Response({
-#             'totalCount': paginator.count,
-#             'totalPages': paginator.num_pages,
-#             'currentPage': leaderboard_page.number,
-#             'leaderboard': ranked_data
-#         })
-
 
 class LeaderboardViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["GET"], url_path="leaderboard")
@@ -188,7 +165,8 @@ class LeaderboardViewSet(viewsets.ViewSet):
             PlayedGame.objects.values("student__id", "student__first_name", "student__last_name", "student__avatar")
             .annotate(
                 total_score=Sum("score"),
-                last_activity=Max("played_at")
+                last_activity=Max("played_at"),
+                medals=Sum("student__profile__medals"),
             )
             .order_by("-total_score")  # Order by total score in descending order
         )
@@ -199,6 +177,7 @@ class LeaderboardViewSet(viewsets.ViewSet):
                 "image": entry["student__avatar"] if entry["student__avatar"] else None,
                 "student_name": f"{entry['student__first_name']} {entry['student__last_name']}",
                 "score": entry["total_score"],
+                "medals": entry["medals"],
                 "last_activity": entry["last_activity"]
             }
             for entry in leaderboard_data
@@ -379,8 +358,15 @@ class CertificateViewSet(viewsets.ViewSet):
         if request.user.role != UserType.TEACHER:
             return Response({"error": "Only teachers can generate certificates."}, status=status.HTTP_403_FORBIDDEN)
 
-        # Get all students
-        students = User.objects.filter(role=UserType.STUDENT)
+        # Get the list of student IDs from the request body
+        student_ids = request.data.get("student_ids", None)
+
+        if student_ids:
+            # Generate certificates for the selected students
+            students = User.objects.filter(id__in=student_ids, role=UserType.STUDENT)
+        else:
+            # Generate certificates for all students if no IDs are provided
+            students = User.objects.filter(role=UserType.STUDENT)
 
         # List to store certificate URLs
         certificate_urls = []
@@ -390,6 +376,7 @@ class CertificateViewSet(viewsets.ViewSet):
             response = self._generate_certificate_for_student(student, request)
             if response.status_code == status.HTTP_201_CREATED:
                 certificate_urls.append({
+                    "student_id": student.id,
                     "student": f"{student.first_name} {student.last_name}",
                     "certificate_url": response.data.get("certificate_url")
                 })

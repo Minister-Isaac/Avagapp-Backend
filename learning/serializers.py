@@ -206,7 +206,7 @@ class PlayedGameSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PlayedGame
-        fields = ['game', 'score', 'duration', 'completed', 'played_at']
+        fields = ["id", "game", "score", "duration", "completed", "played_at"]
         read_only_fields = ['played_at']
 
 
