@@ -4,7 +4,7 @@ from .views import (
     CertificateViewSet, StatisticsViewSet, StudentDashboardAPIView,
     KnowledgeTrailViewSet,LeaderboardViewSet, StudentActivityAPIView,
     QuestionViewSet,OptionalViewSet, GameViewSet,
-    StudentAnswerViewSet, SubjectViestSet
+    StudentAnswerViewSet, SubjectViestSet,PlayedGameViewSet,
     )
 
 
@@ -18,6 +18,7 @@ router.register(r"student-answers", StudentAnswerViewSet, basename="student-answ
 router.register(r"subjects", SubjectViestSet, basename="subjects")
 router.register(r'statistics', StatisticsViewSet, basename='statistics')
 router.register(r'certificates', CertificateViewSet, basename='certificate')
+router.register(r"playedgame", PlayedGameViewSet, basename="playedgame")
 
 
 
