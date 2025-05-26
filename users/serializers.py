@@ -301,3 +301,9 @@ class CreateNotificationSerializer(serializers.ModelSerializer):
             NotificationRecipient.objects.create(notification=notification, user=recipient)
             
         return notification
+    
+class NotificationRecipientSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NotificationRecipient
+        fields = "__all_"
+        read_only_fields = ['id', 'read_at']

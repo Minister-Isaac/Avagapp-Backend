@@ -61,13 +61,16 @@ class StudentProfile(BaseModel):
     
 
 class NotificationRecipient(models.Model):
-    user = models.ForeignKey('users.CustomUser', on_delete=models.CASCADE)
-    notification = models.ForeignKey('Notification', on_delete=models.CASCADE)
+    user = models.ForeignKey("users.CustomUser", on_delete=models.CASCADE)
+    notification = models.ForeignKey("Notification", on_delete=models.CASCADE)
     is_read = models.BooleanField(default=False)
     read_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        unique_together = ('user', 'notification')
+        unique_together = ("user", "notification")
+        
+    def __str__(self):
+        return f"{self.user.email} - {self.notification.title} - {'Read' if self.is_read else 'Unread'}"
 
 
 class Notification(BaseModel):
