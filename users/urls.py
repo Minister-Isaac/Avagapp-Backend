@@ -9,7 +9,7 @@ router = DefaultRouter()
 router.register(r"users", UserViewSet)
 router.register(r"teachers", TeacherViewSet, basename="teacher")
 router.register(r"notifications", NotificationViewSet, basename="notification")
-router.register(r'student-profile', StudentProfileViewSet, basename='student-profile')
+router.register(r"student-profile", StudentProfileViewSet, basename="student-profile")
 
 
 
