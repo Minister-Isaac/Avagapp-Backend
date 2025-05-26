@@ -152,8 +152,8 @@ class StudentActivityAPIView(APIView):
         
         return Response({
             "played_games": PlayedGameSerializer(played_games, many=True).data,
-            "knowledge_trails_watched_video": KnowledgeTrailSerializer(knowledge_trails_watched_video, many=True).data,
-            "knowledge_trails_pdf": KnowledgeTrailSerializer(knowledge_trails_pdf, many=True).data,
+            "knowledge_trails_watched_video": KnowledgeTrailSerializer(knowledge_trails_watched_video, many=True, context={"request": request}).data,
+            "knowledge_trails_pdf": KnowledgeTrailSerializer(knowledge_trails_pdf, many=True, context={"request": request}).data,
         }, status=status.HTTP_200_OK)
 
 

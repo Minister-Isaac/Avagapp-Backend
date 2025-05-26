@@ -258,23 +258,23 @@ class NotificationViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(sender=self.request.user)
 
-    # @action(detail=True, methods=['post'])
-    # def mark_as_read(self, request, id=None):
-    #     user = request.user
-    #     notification = self.get_object()
-    #     try:
-    #         nr = NotificationRecipient.objects.get(notification=notification, user=user)
-    #         nr.is_read = True
-    #         nr.read_at = timezone.now()
-    #         nr.save()
-    #         return Response({"message": "Notification marked as read."}, status=200)
-    #     except NotificationRecipient.DoesNotExist:
-    #         return Response({"error": "Notification not found for this user."}, status=404)
+    @action(detail=True, methods=["POST"], url_path="mark-as-read")
+    def mark_as_read(self, request, id=None):
+        user = request.user
+        notification = self.get_object()
+        try:
+            nr = NotificationRecipient.objects.get(notification=notification, user=user)
+            nr.is_read = True
+            nr.read_at = timezone.now()
+            nr.save()
+            return Response({"message": "Notification marked as read."}, status=200)
+        except NotificationRecipient.DoesNotExist:
+            return Response({"error": "Notification not found for this user."}, status=404)
 
-    # @action(detail=False, methods=['get'])
-    # def unread_count(self, request):
-    #     count = NotificationRecipient.objects.filter(user=request.user, is_read=False).count()
-    #     return Response({"unread_count": count})
+    @action(detail=False, methods=['get'], url_path="unread-count")
+    def unread_count(self, request):
+        count = NotificationRecipient.objects.filter(user=request.user, is_read=False).count()
+        return Response({"unread_count": count})
     
 
 class StudentProfileViewSet(viewsets.ModelViewSet):
