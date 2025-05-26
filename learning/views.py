@@ -175,6 +175,7 @@ class LeaderboardViewSet(viewsets.ViewSet):
         leaderboard = [
             {   
                 "image": entry["student__avatar"] if entry["student__avatar"] else None,
+                "student_id": entry["student__id"],
                 "student_name": f"{entry['student__first_name']} {entry['student__last_name']}",
                 "score": entry["total_score"],
                 "medals": entry["medals"],
