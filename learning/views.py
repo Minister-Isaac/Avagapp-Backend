@@ -1,7 +1,7 @@
 from datetime import datetime
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.views import APIView
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, permissions
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
@@ -11,17 +11,18 @@ from reportlab.lib import colors
 from reportlab.pdfgen import canvas
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
-from django.core.files.base import ContentFile
 from io import BytesIO
 from reportlab.lib.utils import ImageReader
-from django.conf import settings
 import os
 
+from django.core.files.base import ContentFile
+from django.conf import settings
 from django.db.models import Sum
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.db.models import Sum, Max
+from django.http import FileResponse
 
 from users.choices import UserType
 
@@ -145,12 +146,12 @@ class StudentActivityAPIView(APIView):
     def get(self, request):
         user = request.user
 
-        played_games = Game.objects.filter(played_game=True).order_by("id")[:4]
+        played_games = PlayedGame.objects.filter(student=user).order_by("id")[:4]
         knowledge_trails_watched_video = KnowledgeTrail.objects.filter(is_watched=True).order_by("id")[:4]
         knowledge_trails_pdf = KnowledgeTrail.objects.filter(pdf_file__isnull=False).order_by("id")[:4]
         
         return Response({
-            "played_games": GameSerializer(played_games, many=True).data,
+            "played_games": PlayedGameSerializer(played_games, many=True).data,
             "knowledge_trails_watched_video": KnowledgeTrailSerializer(knowledge_trails_watched_video, many=True).data,
             "knowledge_trails_pdf": KnowledgeTrailSerializer(knowledge_trails_pdf, many=True).data,
         }, status=status.HTTP_200_OK)
@@ -339,6 +340,13 @@ class StatisticsViewSet(viewsets.ViewSet):
    
 
 class CertificateViewSet(viewsets.ViewSet):
+    
+    def get_permissions(self):
+        if self.action == "download_certificate":
+            # Allow all users to download certificates
+            return [permissions.AllowAny()]
+        return super().get_permissions()
+    
     @action(detail=True, methods=["POST"], url_path="generate-certificate")
     def generate_certificate(self, request, pk=None):
         # Ensure the requesting user is a teacher
@@ -387,6 +395,15 @@ class CertificateViewSet(viewsets.ViewSet):
             "certificates": certificate_urls
             }, 
             status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=["GET"], url_path="download")
+    def download_certificate(self, request, pk=None):
+        # Get the certificate object
+        certificate = get_object_or_404(Certificate, pk=pk)
+
+        # Serve the file as a downloadable response
+        response = FileResponse(certificate.file.open(), as_attachment=True, filename=f"certificate_{certificate.student.first_name}.pdf")
+        return response
     
     def _generate_certificate_for_student(self, student, request):
         # Generate the PDF
@@ -450,5 +467,7 @@ class CertificateViewSet(viewsets.ViewSet):
         certificate = Certificate.objects.create(student=student, file=pdf_file)
         buffer.close()
         
-        return Response({"message": f"Certificate generated successfully. for {student.first_name} {student.last_name}", "certificate_url": certificate.file.url}, status=status.HTTP_201_CREATED)
-    
+        return Response({
+            "message": f"Certificate generated successfully for {student.first_name} {student.last_name}",
+            "certificate_url": request.build_absolute_uri(f"/learning/certificates/{certificate.id}/download/")
+        }, status=status.HTTP_201_CREATED)
