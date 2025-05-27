@@ -60,7 +60,7 @@ class StudentProfile(BaseModel):
         return f"{self.student.first_name}'s Profile"
     
 
-class NotificationRecipient(models.Model):
+class NotificationRecipient(BaseModel):
     user = models.ForeignKey("users.CustomUser", on_delete=models.CASCADE)
     notification = models.ForeignKey("Notification", on_delete=models.CASCADE)
     is_read = models.BooleanField(default=False)
