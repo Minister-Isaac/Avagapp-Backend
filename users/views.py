@@ -18,8 +18,7 @@ from users.models import Notification, NotificationRecipient, StudentProfile
 from .serializers import (
     CreateNotificationSerializer,
     ForgotPasswordSerializer,
-    LoginSerializer,
-    NotificationSerializer, 
+    LoginSerializer, 
     PasswordResetConfirmSerializer, 
     SignupSerializer,
     StudentProfileSerializer, 
