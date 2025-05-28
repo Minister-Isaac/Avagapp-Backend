@@ -1,3 +1,4 @@
+from datetime import datetime
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.views import APIView
 from rest_framework import viewsets, status
@@ -5,15 +6,27 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 
+from reportlab.lib.pagesizes import letter
+from reportlab.lib import colors
+from reportlab.pdfgen import canvas
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.units import inch
+from django.core.files.base import ContentFile
+from io import BytesIO
+from reportlab.lib.utils import ImageReader
+from django.conf import settings
+import os
+
 from django.db.models import Sum
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.shortcuts import get_object_or_404
+from django.contrib.auth import get_user_model
 
 from users.choices import UserType
 
 from .models import (
-    Game, KnowledgeTrail, Achievement, Option, StudentAnswer,
-    Subject, Question, PlayedGame
+    Game, KnowledgeTrail, Achievement, Option, Statistics, StudentAnswer,
+    Subject, Question, PlayedGame, Certificate
     )
 from .serializers import (
     DashboardSerializer, GameSerializer, KnowledgeTrailSerializer,
@@ -24,6 +37,9 @@ from .serializers import (
 )
 from users.models import StudentProfile
 from users.serializers import UserSerializer, StudentProfileSerializer
+
+
+User = get_user_model()
 
 class SubjectViestSet(viewsets.ModelViewSet):
     queryset = Subject.objects.all()
@@ -170,3 +186,127 @@ class StudentAnswerViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         # Automatically associate the logged-in student with the answer
         serializer.save(student=self.request.user)
+
+
+class StatisticsViewSet(viewsets.ViewSet):
+    @action(detail=False, methods=["GET"], url_path="counts")
+    def get_counts(self, request):
+        # Get the current counts
+        current_student_count = User.objects.filter(role=UserType.STUDENT).count()
+        current_teacher_count = User.objects.filter(role=UserType.TEACHER).count()
+        current_video_count = KnowledgeTrail.objects.filter(video_file__isnull=False).count()
+        current_pdf_count = KnowledgeTrail.objects.filter(pdf_file__isnull=False).count()
+
+        # Get or create the statistics record
+        stats, created = Statistics.objects.get_or_create(id=1)
+
+        # Calculate the differences
+        student_diff = current_student_count - stats.students
+        teacher_diff = current_teacher_count - stats.teachers
+        video_diff = current_video_count - stats.knowledge_trail_videos
+        pdf_diff = current_pdf_count - stats.knowledge_trail_pdfs
+
+        # Update the statistics record
+        stats.students = current_student_count
+        stats.teachers = current_teacher_count
+        stats.knowledge_trail_videos = current_video_count
+        stats.knowledge_trail_pdfs = current_pdf_count
+        stats.save()
+
+        # Return the counts and differences in the response
+        return Response({
+            "students": {
+                "count": current_student_count,
+                "difference": student_diff
+            },
+            "teachers": {
+                "count": current_teacher_count,
+                "difference": teacher_diff
+            },
+            "knowledge_trail_videos": {
+                "count": current_video_count,
+                "difference": video_diff
+            },
+            "knowledge_trail_pdfs": {
+                "count": current_pdf_count,
+                "difference": pdf_diff
+            }
+        }, status=status.HTTP_200_OK)
+        
+
+class CertificateViewSet(viewsets.ViewSet):
+    @action(detail=True, methods=["POST"], url_path="generate-certificate")
+    def generate_certificate(self, request, pk=None):
+        # Ensure the requesting user is a teacher
+        if request.user.role != UserType.TEACHER:
+            return Response({"error": "Only teachers can generate certificates."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Get the student
+        try:
+            student = User.objects.get(pk=pk, role=UserType.STUDENT)
+        except User.DoesNotExist:
+            return Response({"error": "Student not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # Generate the PDF
+        buffer = BytesIO()
+        pdf = canvas.Canvas(buffer, pagesize=letter)
+        width, height = letter
+
+        # Add a subtle border
+        pdf.setStrokeColor(colors.grey)
+        pdf.setLineWidth(1)
+        pdf.rect(40, 40, width - 80, height - 80)
+
+        # === LOGO ===
+        logo_path = os.path.join(settings.BASE_DIR, "static/certificates/logo.png")
+        if os.path.exists(logo_path):
+            logo = ImageReader(logo_path)
+            pdf.drawImage(logo, width/2 - 75, height - 100, width=150, height=60, mask='auto')
+
+        # Add the issuance date (top left, similar to Coursera)
+        pdf.setFont("Helvetica", 10)
+        pdf.setFillColor(colors.black)
+        issuance_date = datetime.now().strftime('%B %d, %Y')
+        pdf.drawString(50, height - 90, issuance_date)
+
+        # Add the student's name (large, centered)
+        pdf.setFont("Helvetica-Bold", 24)
+        pdf.setFillColor(colors.black)
+        pdf.drawCentredString(width / 2, height - 160, f"{student.first_name} {student.last_name}")
+
+        # Add the completion message
+        pdf.setFont("Helvetica", 14)
+        pdf.setFillColor(colors.black)
+        pdf.drawCentredString(width / 2, height - 200, "has successfully completed")
+
+        # Add the course/game title (example: "Knowledge Trail")
+        pdf.setFont("Helvetica-Bold", 18)
+        pdf.setFillColor(colors.darkblue)
+        pdf.drawCentredString(width / 2, height - 240, "Knowledge Trail")
+
+        # Add course description (similar to Coursera's "an online non-credit course...")
+        pdf.setFont("Helvetica", 12)
+        pdf.setFillColor(colors.black)
+        pdf.drawCentredString(width / 2, height - 270, "an online gamified learning module authorized by AVAG")
+
+        # Add issuer information (bottom)
+        pdf.setFont("Helvetica", 12)
+        pdf.setFillColor(colors.black)
+        pdf.drawCentredString(width / 2, 100, f"Issued by: {request.user.first_name}")
+
+        # Add branding (bottom right, similar to Coursera's "Meta" and "Coursera")
+        pdf.setFont("Helvetica-Bold", 12)
+        pdf.setFillColor(colors.darkblue)
+        pdf.drawString(width - 200, 60, "AVAG Learning Platform")
+
+        # Save the PDF
+        pdf.save()
+
+        # Save the PDF to the Certificate model
+        buffer.seek(0)
+        pdf_file = ContentFile(buffer.read(), f"certificate_{student.first_name}.pdf")
+        certificate = Certificate.objects.create(student=student, file=pdf_file)
+        buffer.close()
+        
+        return Response({"message": "Certificate generated successfully.", "certificate_url": certificate.file.url}, status=status.HTTP_201_CREATED)
+    
