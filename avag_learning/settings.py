@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 import os
+import dj_database_url
 from datetime import timedelta
 from pathlib import Path
 
@@ -26,8 +27,16 @@ SECRET_KEY = 'django-insecure-*pr8-!b)u(q$im9h5!h0d+)sas6rp-thg^)bdv%y$y-%1^-yd$
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
+SECRET_KEY = os.environ.get("SECRET_KEY", "") # Use a strong default for local dev only
+
+DEBUG = os.environ.get("DEBUG", "True") == 'True' # Set to False in production
+
+ALLOWED_HOSTS = os.environ.get("ALLOWED_HOSTS", '').split(',')
+if DEBUG:
+    ALLOWED_HOSTS = ["localhost", "127.0.0.1"] + ALLOWED_HOSTS # For local development
+
 AUTH_USER_MODEL = "users.CustomUSER"
-ALLOWED_HOSTS = []
+# ALLOWED_HOSTS = []
 
 PROJECT_APPS = [
     "users",
@@ -168,6 +177,7 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'static')
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
