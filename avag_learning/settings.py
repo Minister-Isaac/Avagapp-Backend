@@ -27,7 +27,7 @@ SECRET_KEY = 'django-insecure-*pr8-!b)u(q$im9h5!h0d+)sas6rp-thg^)bdv%y$y-%1^-yd$
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-SECRET_KEY = os.environ.get("SECRET_KEY", "") # Use a strong default for local dev only
+SECRET_KEY = os.environ.get("SECRET_KEY", SECRET_KEY) # Use a strong default for local dev only
 
 DEBUG = os.environ.get("DEBUG", "True") == 'True' # Set to False in production
 
@@ -187,8 +187,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
-CORS_ALLOW_ALL_ORIGINS = True
-CORS_ALLOW_CREDENTIALS = True
+# CORS_ALLOW_ALL_ORIGINS = True
+# CORS_ALLOW_CREDENTIALS = True
 
 SIMPLE_JWT = {
     "ACCESS_TOKEN_LIFETIME": timedelta(days=7),   
@@ -197,3 +197,20 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),
 }
+
+CORS_ALLOWED_ORIGINS = [
+    "https://avagapp-phi.vercel.app",
+    "https://avagapp-backend.onrender.com",
+    "http://localhost:3000", # For local frontend dev
+]
+
+CORS_ALLOW_CREDENTIALS = True # Only if your frontend sends credentials (cookies, auth headers)
+
+CSRF_TRUSTED_ORIGINS = [
+    "https://avagapp-phi.vercel.app",
+    "https://avagapp-backend.onrender.com",
+    "http://localhost:3000", # For local frontend dev
+]
+
+SESSION_COOKIE_SECURE=True
+CSRF_COOKIE_SECURE=True
