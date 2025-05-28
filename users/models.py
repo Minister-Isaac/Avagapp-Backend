@@ -50,25 +50,27 @@ class CustomUser(AbstractBaseUser, PermissionsMixin, BaseModel):
         return f"{self.first_name} {self.last_name} ({self.email})"
 
  
-class StudentProfile(models.Model):
+class StudentProfile(BaseModel):
     student = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name="profile")
     points = models.IntegerField(default=0)
     medals = models.IntegerField(default=0)
-    level = models.PositiveIntegerField(default=1)
     activities_completed = models.PositiveIntegerField(default=0)
 
     def __str__(self):
         return f"{self.student.first_name}'s Profile"
     
 
-class NotificationRecipient(models.Model):
-    user = models.ForeignKey('users.CustomUser', on_delete=models.CASCADE)
-    notification = models.ForeignKey('Notification', on_delete=models.CASCADE)
+class NotificationRecipient(BaseModel):
+    user = models.ForeignKey("users.CustomUser", on_delete=models.CASCADE)
+    notification = models.ForeignKey("Notification", on_delete=models.CASCADE)
     is_read = models.BooleanField(default=False)
     read_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        unique_together = ('user', 'notification')
+        unique_together = ("user", "notification")
+        
+    def __str__(self):
+        return f"{self.user.email} - {self.notification.title} - {'Read' if self.is_read else 'Unread'}"
 
 
 class Notification(BaseModel):

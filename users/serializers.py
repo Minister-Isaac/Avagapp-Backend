@@ -240,20 +240,13 @@ class TeacherDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ['id', 'first_name', 'last_name', 'email', 'subject', 'experience', 'phone_number', 'institution', 'avatar']
-        
-
-class NotificationSerializer(serializers.ModelSerializer):
-    is_read = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Notification
-        fields = ['id', 'subject', 'message', 'notification_type', 'link', 'created_at', 'is_read']
-
-    def get_is_read(self, obj):
-        user = self.context['request'].user
-        return NotificationRecipient.objects.filter(notification=obj, user=user, is_read=True).exists()
-    
+        fields = [
+            "id", "first_name",
+            "last_name", "email",
+            "subject", "experience",
+            "phone_number", "institution",
+            "avatar", "created_at",]
+            
     
 class CreateNotificationSerializer(serializers.ModelSerializer):
     recipient_roles = serializers.CharField(
@@ -264,21 +257,18 @@ class CreateNotificationSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Notification
-        fields = ["id", "message", "title", "recipient_roles"]
+        fields = ["id", "message", "title", "recipient_roles", "created_at", "updated_at"]
 
     def create(self, validated_data):
         user = self.context["request"].user
-        roles = [UserType.ADMIN]
+        roles = [UserType.ADMIN, UserType.TEACHER]
         if user.role not in roles:
             raise serializers.ValidationError("Only admins can create notifications.")
        
        # Extract recipient roles and remove from validated_data
         recipient_roles = validated_data.pop("recipient_roles")
         
-
         notification = Notification.objects.create(**validated_data)
-        # # Assign the notification to all users
-        # all_users = User.objects.all()
         
         # Determine recipient roles
         if recipient_roles == "both":
@@ -296,3 +286,9 @@ class CreateNotificationSerializer(serializers.ModelSerializer):
             NotificationRecipient.objects.create(notification=notification, user=recipient)
             
         return notification
+    
+class NotificationRecipientSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NotificationRecipient
+        fields = "__all_"
+        read_only_fields = ["id", "read_at"]

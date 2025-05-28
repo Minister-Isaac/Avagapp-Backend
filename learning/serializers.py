@@ -51,7 +51,7 @@ class InstitutionSerializer(serializers.ModelSerializer):
 class OptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Option
-        fields = ["option_text", "is_correct"]
+        fields = ["id", "option_text", "is_correct"]
 
      
 class QuestionSerializer(serializers.ModelSerializer):
@@ -86,7 +86,7 @@ class GameSerializer(serializers.ModelSerializer):
             question_type = question_data.get("question_type")
             
             if question_type == QuestionType.FILL_IN_THE_BLANK:
-                print(question_data)
+
                 # For FILL_IN_THE_BLANK, set the correct_answer field
                 correct_answer = question_data.pop("correct_answer", None)
                 if not correct_answer:
@@ -206,7 +206,7 @@ class PlayedGameSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PlayedGame
-        fields = ['game', 'score', 'duration', 'completed', 'played_at']
+        fields = ["id", "game", "score", "duration", "completed", "played_at"]
         read_only_fields = ['played_at']
 
 
@@ -253,13 +253,12 @@ class StudentLeaderboardSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source='student.first_name', read_only=True)
     profileImageUrl = serializers.SerializerMethodField()
     score = serializers.SerializerMethodField()
-    level = serializers.IntegerField(source='profile.level', read_only=True)
     attendance = serializers.SerializerMethodField()
     lastActivity = serializers.SerializerMethodField()
 
     class Meta:
         model = StudentProfile
-        fields = ['rank', 'studentId', 'name', 'profileImageUrl', 'score', 'level', 'attendance', 'lastActivity']
+        fields = ['rank', 'studentId', 'name', 'profileImageUrl', 'score', 'attendance', 'lastActivity']
 
     def get_profileImageUrl(self, obj):
         return obj.student.avatar.url if obj.student.avatar else "/static/images/default_avatar.png" # Adjust path as needed
@@ -349,10 +348,6 @@ class StudentForCertificateSerializer(serializers.ModelSerializer):
     def get_performance(self, obj):
         # TODO Implement logic to calculate performance (e.g., based on completed activities, quiz scores)
         return 0.90  # Placeholder
-
-class CertificateGenerationRequestSerializer(serializers.Serializer):
-    student_id = serializers.IntegerField(min_value=1)
-    course_id = serializers.IntegerField(min_value=1)
 
 
 class StudentAnswerSerializer(serializers.ModelSerializer):

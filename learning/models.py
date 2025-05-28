@@ -1,5 +1,6 @@
 from django.db import models
 from django.contrib.auth import get_user_model
+from django.utils.timezone import now
 
 from avag_learning.models.models import BaseModel
 from learning.choices import  MediaType, QuestionType
@@ -67,24 +68,77 @@ class StudentAnswer(BaseModel):
             if self.typed_answer and self.question.correct_answer:
                 # Normalize answers (case-insensitive and strip whitespace)
                 if self.typed_answer.strip().lower() == self.question.correct_answer.strip().lower():
-                    # Get or create the student's profile
-                    student_profile, created = StudentProfile.objects.get_or_create(student=self.student)
-                    # Add the question's points to the student's points
-                    student_profile.points += self.question.points
-                    student_profile.save()
-                    
-                    
+                    self._update_student_points(self.question.points)
+                          
         # Check if the selected option is correct
         else:
             # For other question types, check if the selected option is correct
             if self.selected_option and self.selected_option.is_correct:
-                # Get the student's profile
-                student_profile, created = StudentProfile.objects.get_or_create(student=self.student)
-                # Add the question's points to the student's points
-                student_profile.points += self.question.points
-                student_profile.save()
+                self._update_student_points(self.question.points)
+                
         super().save(*args, **kwargs)
+        # Check if the game is completed and award madals
+        self._check_and_award_medals()
         
+    
+    def _update_student_points(self, points):
+        # Get or create  the student's profile
+        student_profile, created = StudentProfile.objects.get_or_create(student=self.student)
+        # Add the question's points to the student's points
+        student_profile.points += points
+        student_profile.save()
+        
+    def _check_and_award_medals(self):
+        # Get the games associated with the question
+        games = self.question.games.all()
+        for game in games:
+            # Get all questions in the game
+            total_questions = game.questions.count()
+
+            # Get the number of answers the student has submitted for this game
+            answered_questions = StudentAnswer.objects.filter(
+                student=self.student,
+                question__in=game.questions.all()
+            ).count()
+
+            # Only proceed if the student has answered all questions in the game
+            if answered_questions == total_questions:
+                # Get the number of correct answers given by the student for this game
+                correct_answers = StudentAnswer.objects.filter(
+                    student=self.student,
+                    question__in=game.questions.all()
+                ).filter(
+                    models.Q(selected_option__is_correct=True) |
+                    models.Q(typed_answer__iexact=models.F('question__correct_answer'))
+                ).count()
+
+                # Calculate the percentage score
+                percentage_score = (correct_answers / total_questions) * 100
+                
+                # Check if the student has achieved a medal
+                if percentage_score >= 80:
+                    # Award a medal to the student
+                    student_profile, created = StudentProfile.objects.get_or_create(student=self.student)
+                    student_profile.medals += 1
+                    student_profile.save()    
+                
+                # Create or update the PlayedGame record
+                played_game, created = PlayedGame.objects.get_or_create(
+                    student=self.student,
+                    game=game,
+                    defaults={
+                        "score": percentage_score,
+                        "completed": True,
+                        "played_at": now()
+                    }
+                )
+                if not created:
+                    # Update the existing PlayedGame record if it already exists
+                    played_game.score = percentage_score
+                    played_game.completed = True
+                    played_game.played_at = now()
+                    played_game.save()
+
 
 class Certificate(BaseModel):
     student = models.ForeignKey(User, on_delete=models.CASCADE)
@@ -173,4 +227,8 @@ class Statistics(models.Model):
     teachers = models.IntegerField(default=0)
     knowledge_trail_videos = models.IntegerField(default=0)
     knowledge_trail_pdfs = models.IntegerField(default=0)
+    certificates_issued = models.IntegerField(default=0)
+    student_points = models.IntegerField(default=0)
+    student_medals = models.IntegerField(default=0)
     last_updated = models.DateTimeField(auto_now=True)
+    last_certificate_check = models.DateTimeField(default=now)

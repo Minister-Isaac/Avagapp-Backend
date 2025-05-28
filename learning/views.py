@@ -1,7 +1,7 @@
 from datetime import datetime
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.views import APIView
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, permissions
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
@@ -11,16 +11,18 @@ from reportlab.lib import colors
 from reportlab.pdfgen import canvas
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
-from django.core.files.base import ContentFile
 from io import BytesIO
 from reportlab.lib.utils import ImageReader
-from django.conf import settings
 import os
 
+from django.core.files.base import ContentFile
+from django.conf import settings
 from django.db.models import Sum
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
+from django.db.models import Sum, Max
+from django.http import FileResponse
 
 from users.choices import UserType
 
@@ -60,6 +62,15 @@ class GameViewSet(viewsets.ModelViewSet):
     serializer_class = GameSerializer
     queryset = Game.objects.all().order_by("id")
     
+class PlayedGameViewSet(viewsets.ModelViewSet):
+    serializer_class = PlayedGameSerializer
+    queryset = PlayedGame.objects.all().order_by("id")
+    
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == UserType.STUDENT:
+            return PlayedGame.objects.filter(student=user)
+        return super().get_queryset()
 
 class StudentDashboardAPIView(APIView):
     authentication_classes = [JWTAuthentication]
@@ -135,49 +146,47 @@ class StudentActivityAPIView(APIView):
     def get(self, request):
         user = request.user
 
-        played_games = Game.objects.filter(played_game=True).order_by("id")[:4]
+        played_games = PlayedGame.objects.filter(student=user).order_by("id")[:4]
         knowledge_trails_watched_video = KnowledgeTrail.objects.filter(is_watched=True).order_by("id")[:4]
         knowledge_trails_pdf = KnowledgeTrail.objects.filter(pdf_file__isnull=False).order_by("id")[:4]
         
         return Response({
-            "played_games": GameSerializer(played_games, many=True).data,
-            "knowledge_trails_watched_video": KnowledgeTrailSerializer(knowledge_trails_watched_video, many=True).data,
-            "knowledge_trails_pdf": KnowledgeTrailSerializer(knowledge_trails_pdf, many=True).data,
+            "played_games": PlayedGameSerializer(played_games, many=True).data,
+            "knowledge_trails_watched_video": KnowledgeTrailSerializer(knowledge_trails_watched_video, many=True, context={"request": request}).data,
+            "knowledge_trails_pdf": KnowledgeTrailSerializer(knowledge_trails_pdf, many=True, context={"request": request}).data,
         }, status=status.HTTP_200_OK)
 
 
-class LeaderboardViewSet(viewsets.ReadOnlyModelViewSet):
-    serializer_class = StudentLeaderboardSerializer
-    queryset = StudentProfile.objects.select_related('student')
 
-    def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset().annotate(total_score=Sum('student__playedgame__score')).order_by('-total_score')
+class LeaderboardViewSet(viewsets.ViewSet):
+    @action(detail=False, methods=["GET"], url_path="leaderboard")
+    def leaderboard(self, request):
+        # Aggregate total scores and last activity for each student
+        leaderboard_data = (
+            PlayedGame.objects.values("student__id", "student__first_name", "student__last_name", "student__avatar")
+            .annotate(
+                total_score=Sum("score"),
+                last_activity=Max("played_at"),
+                medals=Sum("student__profile__medals"),
+            )
+            .order_by("-total_score")  # Order by total score in descending order
+        )
 
-        limit = request.query_params.get('limit', 50)
-        page = request.query_params.get('page', 1)
+        # Format the response
+        leaderboard = [
+            {   
+                "image": entry["student__avatar"] if entry["student__avatar"] else None,
+                "student_id": entry["student__id"],
+                "student_name": f"{entry['student__first_name']} {entry['student__last_name']}",
+                "score": entry["total_score"],
+                "medals": entry["medals"],
+                "last_activity": entry["last_activity"]
+            }
+            for entry in leaderboard_data
+        ]
 
-        paginator = Paginator(queryset, limit)
-        try:
-            leaderboard_page = paginator.page(page)
-        except PageNotAnInteger:
-            leaderboard_page = paginator.page(1)
-        except EmptyPage:
-            leaderboard_page = Paginator([], limit).page(1)
-
-        serializer = self.get_serializer(leaderboard_page, many=True)
-        ranked_data = []
-        base_rank = (int(page) - 1) * int(limit)
-        for i, item in enumerate(serializer.data):
-            item['rank'] = base_rank + i + 1
-            ranked_data.append(item)
-
-        return Response({
-            'totalCount': paginator.count,
-            'totalPages': paginator.num_pages,
-            'currentPage': leaderboard_page.number,
-            'leaderboard': ranked_data
-        })
-
+        return Response(leaderboard, status=200)
+    
 
 class StudentAnswerViewSet(viewsets.ModelViewSet):
     queryset = StudentAnswer.objects.all()
@@ -189,8 +198,8 @@ class StudentAnswerViewSet(viewsets.ModelViewSet):
 
 
 class StatisticsViewSet(viewsets.ViewSet):
-    @action(detail=False, methods=["GET"], url_path="counts")
-    def get_counts(self, request):
+    @action(detail=False, methods=["GET"], url_path="admin-stats")
+    def get_admin_stats(self, request):
         # Get the current counts
         current_student_count = User.objects.filter(role=UserType.STUDENT).count()
         current_teacher_count = User.objects.filter(role=UserType.TEACHER).count()
@@ -232,9 +241,112 @@ class StatisticsViewSet(viewsets.ViewSet):
                 "difference": pdf_diff
             }
         }, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=["GET"], url_path="teacher-stats")
+    def get_teacher_stats(self, request):
         
+        # Get the current counts
+        current_student_count = User.objects.filter(role=UserType.STUDENT).count()
+        current_teacher_count = User.objects.filter(role=UserType.TEACHER).count()
+        current_video_count = KnowledgeTrail.objects.filter(video_file__isnull=False).count()
+        current_certificate_count = Certificate.objects.filter(student__isnull=False).count()
+
+        # Get or create the statistics record
+        stats, created = Statistics.objects.get_or_create(id=1)
+
+        new_certificates = Certificate.objects.filter(created_at__gt=stats.last_updated).count()
+        
+        # Calculate the differences
+        student_diff = current_student_count - stats.students
+        teacher_diff = current_teacher_count - stats.teachers
+        video_diff = current_video_count - stats.knowledge_trail_videos
+
+        # Update the statistics record
+        stats.students = current_student_count
+        stats.teachers = current_teacher_count
+        stats.knowledge_trail_videos = current_video_count
+        stats.certificates_issued += new_certificates
+        stats.last_updated = datetime.now()
+        stats.save()
+
+        # Return the counts and differences in the response
+        return Response({
+            "students": {
+                "count": current_student_count,
+                "difference": student_diff
+            },
+            "classes": {
+                "count": current_teacher_count,
+                "difference": teacher_diff
+            },
+            "lessons": {
+                "count": current_video_count,
+                "difference": video_diff
+            },
+            "Certificates": {
+                "count": current_certificate_count,
+                "new_certificates": new_certificates
+            }
+        }, status=status.HTTP_200_OK)
+    
+    @action(detail=False, methods=["GET"], url_path="student-stats")
+    def get_student_stats(self, request):
+        student = request.user
+        # Get the student's profile
+        student_profile = StudentProfile.objects.get(student=student)
+
+        # Get the current counts
+        current_student_point_count = student_profile.points
+        current_student_medals_count = student_profile.medals
+        played_games_count = PlayedGame.objects.filter(student=student).count()
+        current_certificate_count = Certificate.objects.filter(student=student).count()
+
+        # Get or create the statistics record
+        stats, created = Statistics.objects.get_or_create(id=1)
+
+        new_certificates = Certificate.objects.filter(student=student, created_at__gt=stats.last_updated).count()
+        new_played_games = PlayedGame.objects.filter(student=student, played_at__gt=stats.last_updated).count()
+        
+        # Calculate the differences
+        student_point_diff = current_student_point_count - stats.student_points
+        student_medals_diff = current_student_medals_count - stats.student_medals
+        
+        # Update the statistics record
+        stats.student_points = student_point_diff
+        stats.student_medals = student_medals_diff
+        stats.certificates_issued += new_certificates
+        stats.last_updated = datetime.now()
+        stats.save()
+
+        # Return the counts and differences in the response
+        return Response({
+            "points": {
+                "count": current_student_point_count,
+                "difference": student_point_diff
+            },
+            "medals": {
+                "count": current_student_medals_count,
+                "difference": student_medals_diff
+            },
+            "played_games": {
+                    "count": played_games_count,
+                    "new_played_games": new_played_games
+            },
+            "certificates": {
+                "count": current_certificate_count,
+                "new_certificates": new_certificates
+            }
+        }, status=status.HTTP_200_OK)
+   
 
 class CertificateViewSet(viewsets.ViewSet):
+    
+    def get_permissions(self):
+        if self.action == "download_certificate":
+            # Allow all users to download certificates
+            return [permissions.AllowAny()]
+        return super().get_permissions()
+    
     @action(detail=True, methods=["POST"], url_path="generate-certificate")
     def generate_certificate(self, request, pk=None):
         # Ensure the requesting user is a teacher
@@ -247,6 +359,53 @@ class CertificateViewSet(viewsets.ViewSet):
         except User.DoesNotExist:
             return Response({"error": "Student not found."}, status=status.HTTP_404_NOT_FOUND)
 
+        return self._generate_certificate_for_student(student, request)
+    
+    @action(detail=False, methods=["POST"], url_path="generate-certificates-for-all")
+    def generate_certificates_for_all(self, request):
+        # Ensure the requesting user is a teacher
+        if request.user.role != UserType.TEACHER:
+            return Response({"error": "Only teachers can generate certificates."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Get the list of student IDs from the request body
+        student_ids = request.data.get("student_ids", None)
+
+        if student_ids:
+            # Generate certificates for the selected students
+            students = User.objects.filter(id__in=student_ids, role=UserType.STUDENT)
+        else:
+            # Generate certificates for all students if no IDs are provided
+            students = User.objects.filter(role=UserType.STUDENT)
+
+        # List to store certificate URLs
+        certificate_urls = []
+        
+        # Generate certificates for each student
+        for student in students:
+            response = self._generate_certificate_for_student(student, request)
+            if response.status_code == status.HTTP_201_CREATED:
+                certificate_urls.append({
+                    "student_id": student.id,
+                    "student": f"{student.first_name} {student.last_name}",
+                    "certificate_url": response.data.get("certificate_url")
+                })
+
+        return Response({
+            "message": "Certificates generated successfully for all students.",
+            "certificates": certificate_urls
+            }, 
+            status=status.HTTP_201_CREATED)
+    
+    @action(detail=True, methods=["GET"], url_path="download")
+    def download_certificate(self, request, pk=None):
+        # Get the certificate object
+        certificate = get_object_or_404(Certificate, pk=pk)
+
+        # Serve the file as a downloadable response
+        response = FileResponse(certificate.file.open(), as_attachment=True, filename=f"certificate_{certificate.student.first_name}.pdf")
+        return response
+    
+    def _generate_certificate_for_student(self, student, request):
         # Generate the PDF
         buffer = BytesIO()
         pdf = canvas.Canvas(buffer, pagesize=letter)
@@ -308,5 +467,7 @@ class CertificateViewSet(viewsets.ViewSet):
         certificate = Certificate.objects.create(student=student, file=pdf_file)
         buffer.close()
         
-        return Response({"message": "Certificate generated successfully.", "certificate_url": certificate.file.url}, status=status.HTTP_201_CREATED)
-    
+        return Response({
+            "message": f"Certificate generated successfully for {student.first_name} {student.last_name}",
+            "certificate_url": request.build_absolute_uri(f"/learning/certificates/{certificate.id}/download/")
+        }, status=status.HTTP_201_CREATED)
