@@ -3,7 +3,6 @@ from rest_framework import serializers
 from learning.choices import QuestionType
 from users.choices import UserType
 from users.models import StudentProfile
-# from users.serializers import UserSerializer
 from .models import (
     Achievement,
     Badge,
@@ -18,7 +17,7 @@ from .models import (
     Subject,
     Topic,
     UserAttendance,
-    
+    Module
 )
 
 from django.db.models import Sum
@@ -51,7 +50,7 @@ class InstitutionSerializer(serializers.ModelSerializer):
 class OptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = Option
-        fields = ["id", "option_text", "is_correct"]
+        fields = ["id", "option_text", "is_correct", "order"]
 
      
 class QuestionSerializer(serializers.ModelSerializer):
@@ -60,49 +59,41 @@ class QuestionSerializer(serializers.ModelSerializer):
         model = Question
         fields = ["id", "question_text", "question_type", "points", "options", "correct_answer"]
 
-        
+
 class GameSerializer(serializers.ModelSerializer):
-    questions = QuestionSerializer(many=True)  # Nested serializer for questions
+    questions = QuestionSerializer(many=True)
 
     class Meta:
         model = Game
-        fields = ["id", "title",  "badges_awarded", "questions"]
+        fields = ["id", "title", "badges_awarded", "questions"]
 
-        
     def create(self, validated_data):
         user = self.context.get("request").user
         roles = [UserType.ADMIN, UserType.TEACHER]
         if user.role not in roles:
-            raise serializers.ValidationError("Only teachers or admin can create a game.")
-        
-        # Extract the questions from the validated data
-        questions_data = validated_data.pop("questions")
-        
-        # Create the game instance
-        game = Game.objects.create(**validated_data)
-        
-        #create the questions and associate them with the game
-        for question_data in questions_data:
-            question_type = question_data.get("question_type")
-            
-            if question_type == QuestionType.FILL_IN_THE_BLANK:
+            raise serializers.ValidationError("Only teachers or admins can create games.")
 
-                # For FILL_IN_THE_BLANK, set the correct_answer field
-                correct_answer = question_data.pop("correct_answer", None)
+        questions_data = validated_data.pop("questions")
+        game = Game.objects.create(**validated_data)
+
+        for question_data in questions_data:
+            qtype = question_data.get("question_type")
+            correct_answer = question_data.pop("correct_answer", None)
+
+            if qtype == QuestionType.FILL_IN_THE_BLANK:
                 if not correct_answer:
                     raise serializers.ValidationError(
-                        {"correct_answer": "This field is required for FILL_IN_THE_BLANK questions."}
+                        "This field is required for fill-in-the-blank questions."
                     )
-                question = Question.objects.create(**question_data, correct_answer=correct_answer)
-            else:    
-                options_data = question_data.pop("options")
-                question = Question.objects.create(**question_data)
-                
-                # Create the options and associate them with the question
-                for option_data in options_data:
-                    Option.objects.create(question=question, **option_data)
-                    
-            question.games.add(game)  # Associate the question with the game
+                options_data = []
+            else:
+                options_data = question_data.pop("options", [])
+
+            question = Question.objects.create(**question_data, correct_answer=correct_answer)
+            for option_data in options_data:
+                Option.objects.create(question=question, **option_data)
+
+            question.games.add(game)
         return game
 
 
@@ -118,10 +109,10 @@ class CertificateSerializer(serializers.ModelSerializer):
         fields = "__all__"
 
 
-class KnowledgeTrailSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = KnowledgeTrail
-        fields = "__all__"
+# class KnowledgeTrailSerializer(serializers.ModelSerializer):
+#     class Meta:
+#         model = KnowledgeTrail
+#         fields = "__all__"
 
 
 class BadgeSerializer(serializers.ModelSerializer):
@@ -142,6 +133,11 @@ class KnowledgeTrailSerializer(serializers.ModelSerializer):
     subject_name = serializers.CharField(source="subject.name", read_only=True)
     assigned_by_name = serializers.CharField(source="assigned_by.first_name", read_only=True)
     media_url = serializers.SerializerMethodField()
+    target_students = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=User.objects.filter(role=UserType.STUDENT),
+        required=False
+    )
 
     class Meta:
         model = KnowledgeTrail
@@ -158,6 +154,8 @@ class KnowledgeTrailSerializer(serializers.ModelSerializer):
             "description",
             "recommended",
             "is_watched",
+            "is_public",
+            "target_students",
         ]
 
     def validate(self, data):
@@ -195,10 +193,23 @@ class KnowledgeTrailSerializer(serializers.ModelSerializer):
         if request.user.role not in roles:
             raise serializers.ValidationError("Only teachers or admin can create KnowledgeTrail.")
         
+        target_students = validated_data.pop("target_students", [])
+        is_public = validated_data.get("is_public", True)
+        
+        if not is_public and not target_students:
+            raise serializers.ValidationError("When creating a private KnowledgeTrail, you must select at least one student.")
+        
         # Assign the current user as the 'assigned_by' field
         validated_data["assigned_by"] = request.user
-
-        return super().create(validated_data)
+        
+        # Create the KnowledgeTrail instance
+        knowledge_trail = super().create(validated_data)
+        
+        # Add target students if any
+        if target_students:
+            knowledge_trail.target_students.set(target_students)
+        
+        return knowledge_trail
 
 
 class PlayedGameSerializer(serializers.ModelSerializer):
@@ -361,3 +372,24 @@ class StudentAnswerSerializer(serializers.ModelSerializer):
 
         # The `save` method in the model will handle updating the student's points
         return student_answer
+
+
+class ModuleSerializer(serializers.ModelSerializer):
+    knowledge_trails = KnowledgeTrailSerializer(many=True, read_only=True)
+    assigned_by_name = serializers.CharField(source='assigned_by.first_name', read_only=True)
+    subject_name = serializers.CharField(source='subject.name', read_only=True)
+
+    class Meta:
+        model = Module
+        fields = [
+            'id', 'title', 'description', 'subject', 'subject_name',
+            'order', 'assigned_by_name', 'knowledge_trails'
+        ]
+
+    def create(self, validated_data):
+        user = self.context.get('request').user
+        roles = [UserType.ADMIN, UserType.TEACHER]
+        if user.role not in roles:
+            raise serializers.ValidationError("Only teachers or admins can create modules.")
+        validated_data['assigned_by'] = user
+        return super().create(validated_data)

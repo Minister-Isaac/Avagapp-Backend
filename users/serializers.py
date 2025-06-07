@@ -59,9 +59,9 @@ class SignupSerializer(serializers.ModelSerializer):
 
         if role == 'teacher':
             if subject_taught is None:
-                raise ValidationError( "This field is required for teachers.")
+                raise ValidationError("This field is required for teachers 'subject_taught'.")
             if experience_years is None:
-                raise ValidationError("This field is required for teachers.")
+                raise ValidationError("This field is required for teachers 'experience_years'.")
              # Validate that the subject exists
             try:
                 subject = Subject.objects.get(name__iexact=subject_taught)
@@ -70,17 +70,6 @@ class SignupSerializer(serializers.ModelSerializer):
                 raise ValidationError(f"Subject with name '{subject_taught}' does not exist.")
             
         return attrs
-    
-    def validate_password(self, value):
-        if len(value) < 8:
-            raise ValidationError("Password must be at least 8 character long.")
-        if not re.search(r"[A-Z]", value):
-            raise ValidationError("Password must contain one uppercase letter.")
-        if not re.search(r"\d", value):
-            raise ValidationError("Password must contain at least one numeric digit.")
-        if not re.search(r"[a-zA-Z0-9]", value):
-            raise ValidationError("Password must contain at least one alphanumeric character.")
-        return value
     
     def create(self, validated_data):
         try:

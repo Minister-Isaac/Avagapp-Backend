@@ -53,6 +53,7 @@ class Option(BaseModel):
     is_correct = models.BooleanField(
         default=False,
         help_text="Whether this option is the correct answer to the question.")
+    order = models.PositiveIntegerField(null=True, blank=True, help_text="Correct order for matching/arranging type games.")
     
 
 class StudentAnswer(BaseModel):
@@ -60,26 +61,43 @@ class StudentAnswer(BaseModel):
     question = models.ForeignKey(Question, on_delete=models.CASCADE)
     selected_option = models.ForeignKey(Option, on_delete=models.CASCADE, null=True, blank=True)
     typed_answer = models.TextField(null=True, blank=True, help_text="The student's answer for 'fill in the blank' questions.")
-    
+    is_correct = models.BooleanField(default=False)
+
     def save(self, *args, **kwargs):
-         # Check if the question is 'fill in the blank'
+        is_correct = False
+
         if self.question.question_type == QuestionType.FILL_IN_THE_BLANK:
-            # Compare the student's typed answer with the correct answer
             if self.typed_answer and self.question.correct_answer:
-                # Normalize answers (case-insensitive and strip whitespace)
-                if self.typed_answer.strip().lower() == self.question.correct_answer.strip().lower():
+                is_correct = self.typed_answer.strip().lower() == self.question.correct_answer.strip().lower()
+
+        elif self.question.question_type == QuestionType.MATCH_THE_COLUMN and self.typed_answer:
+            try:
+                submitted_ids = list(map(int, self.typed_answer.strip().split(',')))
+                correct_ids = list(self.question.options.order_by("order").values_list("id", flat=True))
+                is_correct = submitted_ids == correct_ids
+            except ValueError:
+                pass
+        elif self.question.question_type == QuestionType.WORD_HUNT and self.typed_answer:
+            try:
+                # Count how many options are marked is_correct=True
+                correct_count = self.question.options.filter(is_correct=True).count()
+                submitted_count = int(self.typed_answer.strip())
+
+                if submitted_count == correct_count:
                     self._update_student_points(self.question.points)
-                          
-        # Check if the selected option is correct
+            except ValueError:
+                pass  # Invalid number submitted by student
+
         else:
-            # For other question types, check if the selected option is correct
             if self.selected_option and self.selected_option.is_correct:
-                self._update_student_points(self.question.points)
-                
+                is_correct = True
+
+        if is_correct:
+            self._update_student_points(self.question.points)
+
+        self.is_correct = is_correct
         super().save(*args, **kwargs)
-        # Check if the game is completed and award madals
         self._check_and_award_medals()
-        
     
     def _update_student_points(self, points):
         # Get or create  the student's profile
@@ -106,10 +124,8 @@ class StudentAnswer(BaseModel):
                 # Get the number of correct answers given by the student for this game
                 correct_answers = StudentAnswer.objects.filter(
                     student=self.student,
-                    question__in=game.questions.all()
-                ).filter(
-                    models.Q(selected_option__is_correct=True) |
-                    models.Q(typed_answer__iexact=models.F('question__correct_answer'))
+                    question__in=game.questions.all(),
+                    is_correct=True
                 ).count()
 
                 # Calculate the percentage score
@@ -146,9 +162,25 @@ class Certificate(BaseModel):
     issued_at = models.DateTimeField(auto_now_add=True)
     
 
+class Module(BaseModel):
+    title = models.CharField(max_length=255)
+    description = models.TextField(blank=True)
+    subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name="modules")
+    order = models.PositiveIntegerField(default=0, help_text="Order in which this module appears")
+    assigned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f"{self.subject.name} - {self.title}"
+    
+
 class KnowledgeTrail(BaseModel):
     title = models.CharField(max_length=255)
     subject = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name="knowledge_items")
+    module = models.ForeignKey(Module, on_delete=models.CASCADE, related_name="knowledge_trails", null=True, blank=True)
+    order = models.PositiveIntegerField(default=0, help_text="Order within the module")
     assigned_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True)
     pdf_file = models.FileField(upload_to="knowledge_pdf_media/", null=True, blank=True)
     video_file = models.FileField(upload_to="knowledge_video_media/", null=True, blank=True)
@@ -157,6 +189,9 @@ class KnowledgeTrail(BaseModel):
     note = models.TextField(null=True, blank=True)
     recommended = models.BooleanField(default=False)
     is_watched = models.BooleanField(default=False)
+    is_public = models.BooleanField(default=True, help_text="If True, all students can see this. If False, only selected students can see it.")
+    target_students = models.ManyToManyField(User, related_name="targeted_knowledge_trails", blank=True,
+                                           help_text="Specific students who can see this knowledge trail when not public")
 
     def __str__(self):
         return f"{self.title} - {self.assigned_by} - {self.title}"
@@ -232,3 +267,41 @@ class Statistics(models.Model):
     student_medals = models.IntegerField(default=0)
     last_updated = models.DateTimeField(auto_now=True)
     last_certificate_check = models.DateTimeField(default=now)
+
+def award_top_students_badges():
+    """
+    Awards Gold, Silver, and Bronze badges to the top 3 students based on their total points.
+    Ensures each student only has one of these badges at a time.
+    """
+    
+    # Get top 3 students by points
+    top_students = StudentProfile.objects.order_by('-points')[:3]
+    badge_names = ["Gold", "Silver", "Bronze"]
+    badge_descriptions = [
+        "Awarded to the student with the highest score.",
+        "Awarded to the student with the second highest score.",
+        "Awarded to the student with the third highest score."
+    ]
+    badge_images = [
+        "badges/gold.png",  # You should have these images in your media folder
+        "badges/silver.png",
+        "badges/bronze.png"
+    ]
+    
+    # Remove these badges from all students before re-awarding
+    Badge.objects.filter(name__in=badge_names).delete()
+    
+    for idx, student_profile in enumerate(top_students):
+        badge, _ = Badge.objects.get_or_create(
+            name=badge_names[idx],
+            student=student_profile.student,
+            defaults={
+                "description": badge_descriptions[idx],
+                "image": badge_images[idx]
+            }
+        )
+        # Optionally, create an Achievement record
+        Achievement.objects.get_or_create(
+            student=student_profile.student,
+            badge=badge
+        )

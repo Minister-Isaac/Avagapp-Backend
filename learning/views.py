@@ -21,20 +21,20 @@ from django.db.models import Sum
 from django.core.paginator import Paginator, EmptyPage, PageNotAnInteger
 from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
-from django.db.models import Sum, Max
+from django.db.models import Sum, Max, Q
 from django.http import FileResponse
 
 from users.choices import UserType
 
 from .models import (
     Game, KnowledgeTrail, Achievement, Option, Statistics, StudentAnswer,
-    Subject, Question, PlayedGame, Certificate
+    Subject, Question, PlayedGame, Certificate, Module
     )
 from .serializers import (
     DashboardSerializer, GameSerializer, KnowledgeTrailSerializer,
     AchievementSerializer, OptionSerializer,
     PlayedGameSerializer, QuestionSerializer, StudentAnswerSerializer,
-    SubjectSerializer,
+    SubjectSerializer, ModuleSerializer,
     StudentLeaderboardSerializer
 )
 from users.models import StudentProfile
@@ -125,12 +125,18 @@ class KnowledgeTrailViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         serializer.save(assigned_by=self.request.user)
-        
+
     def get_queryset(self):
         user = self.request.user
         if user.role == UserType.TEACHER:
             # Teachers can only see the knowledge trails they created
             return KnowledgeTrail.objects.filter(assigned_by=user).order_by("id")
+        elif user.role == UserType.STUDENT:
+            # Students can see public knowledge trails OR private ones where they are targeted
+            return KnowledgeTrail.objects.filter(
+                Q(is_public=True) |  # Public knowledge trails
+                Q(is_public=False, target_students=user)  # Private knowledge trails where student is targeted
+            ).order_by("id")
         else:
             return KnowledgeTrail.objects.all().order_by("id")
 
@@ -471,3 +477,13 @@ class CertificateViewSet(viewsets.ViewSet):
             "message": f"Certificate generated successfully for {student.first_name} {student.last_name}",
             "certificate_url": request.build_absolute_uri(f"/learning/certificates/{certificate.id}/download/")
         }, status=status.HTTP_201_CREATED)
+
+class ModuleViewSet(viewsets.ModelViewSet):
+    serializer_class = ModuleSerializer
+    
+    def get_queryset(self):
+        user = self.request.user
+        if user.role == UserType.TEACHER:
+            return Module.objects.filter(assigned_by=user).order_by("order")
+        else:
+            return Module.objects.all().order_by("order")
