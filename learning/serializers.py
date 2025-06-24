@@ -65,7 +65,7 @@ class GameSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Game
-        fields = ["id", "title", "badges_awarded", "questions"]
+        fields = ["id", "title", "badges_awarded", "questions", "module"]
 
     def create(self, validated_data):
         user = self.context.get("request").user
@@ -156,6 +156,7 @@ class KnowledgeTrailSerializer(serializers.ModelSerializer):
             "is_watched",
             "is_public",
             "target_students",
+            "module",
         ]
 
     def validate(self, data):

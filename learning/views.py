@@ -23,12 +23,14 @@ from django.shortcuts import get_object_or_404
 from django.contrib.auth import get_user_model
 from django.db.models import Sum, Max, Q
 from django.http import FileResponse
+from django.utils import timezone
 
+from learning.utility import has_completed_module
 from users.choices import UserType
 
 from .models import (
     Game, KnowledgeTrail, Achievement, Option, Statistics, StudentAnswer,
-    Subject, Question, PlayedGame, Certificate, Module
+    Subject, Question, PlayedGame, Certificate, Module, KnowledgeTrailProgress
     )
 from .serializers import (
     DashboardSerializer, GameSerializer, KnowledgeTrailSerializer,
@@ -61,6 +63,18 @@ class OptionalViewSet(viewsets.ModelViewSet):
 class GameViewSet(viewsets.ModelViewSet):  
     serializer_class = GameSerializer
     queryset = Game.objects.all().order_by("id")
+
+    def retrieve(self, request, *args, **kwargs):
+        game = self.get_object()
+        user = request.user
+
+        if user.role == UserType.STUDENT and game.module:
+            if not has_completed_module(user, game.module):
+                return Response(
+                    "You must complete the module before accessing this game.",
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        return super().retrieve(request, *args, **kwargs)
     
 class PlayedGameViewSet(viewsets.ModelViewSet):
     serializer_class = PlayedGameSerializer
@@ -146,6 +160,16 @@ class KnowledgeTrailViewSet(viewsets.ModelViewSet):
         serializer = KnowledgeTrailSerializer(knowledge_trails, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
         
+    @action(detail=True, methods=["POST"], url_path="mark-completed")
+    def mark_completed(self, request, pk=None):
+        trail = self.get_object()
+        KnowledgeTrailProgress.objects.update_or_create(
+            student=request.user,
+            knowledge_trail=trail,
+            defaults={'completed': True, 'completed_at': timezone.now()}
+        )
+        return Response({"detail": "Marked as completed."}, status=status.HTTP_200_OK)
+    
 
 class StudentActivityAPIView(APIView):
 
@@ -364,7 +388,18 @@ class CertificateViewSet(viewsets.ViewSet):
             student = User.objects.get(pk=pk, role=UserType.STUDENT)
         except User.DoesNotExist:
             return Response({"error": "Student not found."}, status=status.HTTP_404_NOT_FOUND)
+        
+        module_id = request.data.get("module_id")
+        if not module_id:
+            return Response("Module ID is required for certificate generation.", status=status.HTTP_400_BAD_REQUEST)
+        try:
+            module = Module.objects.get(pk=module_id)
+        except Module.DoesNotExist:
+            return Response("Module not found.", status=status.HTTP_404_NOT_FOUND)
 
+        if not has_completed_module(student, module):
+            return Response("Student has not completed all knowledge trails in this module.", status=status.HTTP_403_FORBIDDEN)
+        
         return self._generate_certificate_for_student(student, request)
     
     @action(detail=False, methods=["POST"], url_path="generate-certificates-for-all")
@@ -372,6 +407,14 @@ class CertificateViewSet(viewsets.ViewSet):
         # Ensure the requesting user is a teacher
         if request.user.role != UserType.TEACHER:
             return Response({"error": "Only teachers can generate certificates."}, status=status.HTTP_403_FORBIDDEN)
+
+        module_id = request.data.get("module_id")
+        if not module_id:
+            return Response({"error": "Module ID is required for certificate generation."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            module = Module.objects.get(pk=module_id)
+        except Module.DoesNotExist:
+            return Response({"error": "Module not found."}, status=status.HTTP_404_NOT_FOUND)
 
         # Get the list of student IDs from the request body
         student_ids = request.data.get("student_ids", None)
@@ -388,12 +431,20 @@ class CertificateViewSet(viewsets.ViewSet):
         
         # Generate certificates for each student
         for student in students:
-            response = self._generate_certificate_for_student(student, request)
-            if response.status_code == status.HTTP_201_CREATED:
+            if has_completed_module(student, module):
+                response = self._generate_certificate_for_student(student, request)
+                if response.status_code == status.HTTP_201_CREATED:
+                    certificate_urls.append({
+                        "student_id": student.id,
+                        "student": f"{student.first_name} {student.last_name}",
+                        "certificate_url": response.data.get("certificate_url")
+                    })
+            else:
                 certificate_urls.append({
                     "student_id": student.id,
                     "student": f"{student.first_name} {student.last_name}",
-                    "certificate_url": response.data.get("certificate_url")
+                    "certificate_url": None,
+                    "error": "Student has not completed all knowledge trails in this module."
                 })
 
         return Response({

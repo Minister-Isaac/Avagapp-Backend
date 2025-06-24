@@ -197,6 +197,16 @@ class KnowledgeTrail(BaseModel):
         return f"{self.title} - {self.assigned_by} - {self.title}"
     
 
+class KnowledgeTrailProgress(models.Model):
+    student = models.ForeignKey(User, on_delete=models.CASCADE)
+    knowledge_trail = models.ForeignKey('KnowledgeTrail', on_delete=models.CASCADE)
+    completed = models.BooleanField(default=False)
+    completed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        unique_together = ('student', 'knowledge_trail')
+
+
 class Badge(BaseModel):
     name = models.CharField(max_length=100)
     student = models.ForeignKey(User, on_delete=models.CASCADE, related_name="badges")
@@ -219,6 +229,7 @@ class Achievement(BaseModel):
 class Game(BaseModel):
     title = models.CharField(max_length=255)
     reward_points = models.PositiveIntegerField(default=10)
+    module = models.ForeignKey('Module', on_delete=models.CASCADE, related_name='games', null=True, blank=True, help_text="Module this game belongs to")
     badges_awarded = models.CharField(max_length=255, blank=True, help_text="Comma-separated badge names if any")
     questions = models.ManyToManyField('Question', related_name='games', blank=True)
     played_game = models.BooleanField(default=False)

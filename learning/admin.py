@@ -3,10 +3,11 @@ from unfold.admin import ModelAdmin
 
 from .models import (Badge, Certificate, Institution, KnowledgeTrail,
                     Option, Question,PlayedGame,
-                    StudentAnswer, Subject, Topic, Achievement)
+                    StudentAnswer, Subject, Topic, Achievement, KnowledgeTrailProgress)
  
 
 
+@admin.register(KnowledgeTrailProgress)
 @admin.register(PlayedGame)
 @admin.register(Badge)
 @admin.register(Achievement)

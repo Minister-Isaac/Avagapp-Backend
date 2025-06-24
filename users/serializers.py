@@ -19,6 +19,7 @@ User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
     status = serializers.BooleanField(source="is_active", read_only=True)
+    subject_taught = serializers.SerializerMethodField()
     class Meta:
         model = User
         fields = (
@@ -32,13 +33,18 @@ class UserSerializer(serializers.ModelSerializer):
             "email": {"read_only": True},
             "phone_number": {"required": False}
         }
-        
+    
+    def get_subject_taught(self, obj):
+        if obj.subject_taught:
+            return SubjectSerializer(obj.subject_taught).data
+        return None
+
 
 class SignupSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
     confirm_password = serializers.CharField(write_only=True, required=True)
     phone_number = serializers.CharField(required=False)
-    subject_taught = serializers.CharField(required=False)  # Accept subject name as input
+    subject_taught = serializers.PrimaryKeyRelatedField(queryset=Subject.objects.all(), required=False)
     experience_years = serializers.IntegerField(required=False, min_value=0)
     
     class Meta:
@@ -62,28 +68,12 @@ class SignupSerializer(serializers.ModelSerializer):
                 raise ValidationError("This field is required for teachers 'subject_taught'.")
             if experience_years is None:
                 raise ValidationError("This field is required for teachers 'experience_years'.")
-             # Validate that the subject exists
-            try:
-                subject = Subject.objects.get(name__iexact=subject_taught)
-                attrs['subject_taught'] = subject  # Replace subject name with the Subject instance
-            except Subject.DoesNotExist:
-                raise ValidationError(f"Subject with name '{subject_taught}' does not exist.")
-            
         return attrs
     
     def create(self, validated_data):
+        comfirm_password = validated_data.pop("confirm_password")
         try:
-            user = User.objects.create_user(
-                first_name=validated_data["first_name"],
-                last_name=validated_data["last_name"],
-                phone_number=validated_data.get("phone_number"),
-                email=validated_data["email"],
-                password=validated_data["password"],
-                role=validated_data["role"],
-                institution=validated_data.get("institution"),
-                subject_taught=validated_data.get("subject_taught"),
-                experience_years=validated_data.get("experience_years")
-            )
+            user = User.objects.create_user(**validated_data)
             return user
         except Exception as e:
             raise ValidationError(f"error creating user: {e}")

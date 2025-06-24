@@ -1,12 +1,14 @@
 from django.urls import reverse
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.utils import timezone
+
 from rest_framework.test import APITestCase
 from rest_framework import status
 
 from users.models import StudentProfile
 from users.choices import UserType
-from learning.models import Game, KnowledgeTrail, Subject, StudentAnswer
+from learning.models import Game, KnowledgeTrail, Module, Subject, StudentAnswer
 from learning.choices import QuestionType
 
 User = get_user_model()
@@ -238,3 +240,136 @@ class KnowledgeTrailTests(APITestCase):
         
         response = self.client.post(self.url, data, format='multipart')
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+class ModuleGameFlowTest(APITestCase):
+    def setUp(self):
+        # Create users
+        self.teacher = User.objects.create_user(
+            email="teacher@example.com", password="pass", role=UserType.TEACHER
+        )
+        self.student = User.objects.create_user(
+            email="student@example.com", password="pass", role=UserType.STUDENT
+        )
+        self.subject = Subject.objects.create(name="Math", description="Math course")
+        self.client.force_authenticate(user=self.teacher)
+
+        # Create a module
+        self.module = Module.objects.create(
+            title="Algebra", subject=self.subject, assigned_by=self.teacher
+        )
+
+        # Create two knowledge trails in the module
+        self.trail1 = KnowledgeTrail.objects.create(
+            title="Video 1", subject=self.subject, module=self.module, assigned_by=self.teacher
+        )
+        self.trail2 = KnowledgeTrail.objects.create(
+            title="Video 2", subject=self.subject, module=self.module, assigned_by=self.teacher
+        )
+
+        # Create a game for the module
+        self.game = Game.objects.create(
+            title="Algebra Game", module=self.module
+        )
+
+    def test_student_cannot_access_game_until_all_trails_completed(self):
+        # Student tries to access the game (should be forbidden)
+        self.client.force_authenticate(user=self.student)
+        url = reverse("game-detail", args=[self.game.id])
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Student marks only one trail as completed
+        mark_url = reverse("knowledge-trail-mark-completed", args=[self.trail1.id])
+        response = self.client.post(mark_url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Still can't access the game
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Student marks the second trail as completed
+        mark_url2 = reverse("knowledge-trail-mark-completed", args=[self.trail2.id])
+        response = self.client.post(mark_url2)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+        # Now student can access the game
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["title"], "Algebra Game")
+
+
+class CertificateModuleCompletionTest(APITestCase):
+    def setUp(self):
+        self.teacher = User.objects.create_user(
+            email="teacher2@example.com", password="pass", role=UserType.TEACHER
+        )
+        self.student = User.objects.create_user(
+            email="student2@example.com", password="pass", role=UserType.STUDENT
+        )
+        self.subject = Subject.objects.create(name="Science", description="Science course")
+        self.client.force_authenticate(user=self.teacher)
+
+        self.module = Module.objects.create(
+            title="Physics", subject=self.subject, assigned_by=self.teacher
+        )
+        self.trail1 = KnowledgeTrail.objects.create(
+            title="Lesson 1", subject=self.subject, module=self.module, assigned_by=self.teacher
+        )
+        self.trail2 = KnowledgeTrail.objects.create(
+            title="Lesson 2", subject=self.subject, module=self.module, assigned_by=self.teacher
+        )
+
+    def test_certificate_generation_requires_module_completion(self):
+        # Try to generate certificate for student who has NOT completed all trails
+        self.client.force_authenticate(user=self.teacher)
+        url = reverse("certificate-generate-certificate", args=[self.student.id])
+        response = self.client.post(url, {"module_id": self.module.id})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Mark only one trail as completed
+        self.client.force_authenticate(user=self.student)
+        mark_url = reverse("knowledge-trail-mark-completed", args=[self.trail1.id])
+        self.client.post(mark_url)
+
+        # Try again (should still fail)
+        self.client.force_authenticate(user=self.teacher)
+        response = self.client.post(url, {"module_id": self.module.id})
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+        # Mark second trail as completed
+        self.client.force_authenticate(user=self.student)
+        mark_url2 = reverse("knowledge-trail-mark-completed", args=[self.trail2.id])
+        self.client.post(mark_url2)
+
+        # Now certificate generation should succeed
+        self.client.force_authenticate(user=self.teacher)
+        response = self.client.post(url, {"module_id": self.module.id})
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn("certificate_url", response.data)
+
+    def test_bulk_certificate_generation_only_for_completed_students(self):
+        # Mark only trail1 as completed for student
+        self.client.force_authenticate(user=self.student)
+        mark_url = reverse("knowledge-trail-mark-completed", args=[self.trail1.id])
+        self.client.post(mark_url)
+
+        self.client.force_authenticate(user=self.teacher)
+        url = reverse("certificate-generate-certificates-for-all")
+        response = self.client.post(url, {"module_id": self.module.id, "student_ids": [self.student.id]})
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        certs = response.data["certificates"]
+        self.assertEqual(len(certs), 1)
+        self.assertIsNone(certs[0]["certificate_url"])
+        self.assertIn("not completed", certs[0]["error"].lower())
+
+        # Complete all trails
+        self.client.force_authenticate(user=self.student)
+        mark_url2 = reverse("knowledge-trail-mark-completed", args=[self.trail2.id])
+        self.client.post(mark_url2)
+
+        self.client.force_authenticate(user=self.teacher)
+        response = self.client.post(url, {"module_id": self.module.id, "student_ids": [self.student.id]})
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        certs = response.data["certificates"]
+        self.assertEqual(len(certs), 1)
+        self.assertIsNotNone(certs[0]["certificate_url"])
